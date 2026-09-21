@@ -1,4 +1,3 @@
 <Solution>
   <Project Path="BlazorPractice/BlazorPractice.csproj" />
-  <Project Path="NET9.BlazorWebAssemblyStandaloneApp/NET9.BlazorWebAssemblyStandaloneApp.csproj" />
 </Solution>
