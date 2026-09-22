@@ -42,6 +42,7 @@ namespace BlazorPractice.Library
             await Reference.SetValueAsync<decimal>("height", value);
         }
 
+
         public async Task<IJSObjectReference> GetContext(string contextType)
         {
             return await Reference.InvokeAsync<IJSObjectReference>("getContext", contextType);
@@ -83,7 +84,11 @@ namespace BlazorPractice.Library
         public string filter { get; set; }
         public string imageSmoothingQuality { get; set; }
         public string strokeStyle { get; set; }
-        public string fillStyle { get; set; }
+
+        public async Task<string> GetFillStyle() => await Reference.GetValueAsync<string>("fillStyle");
+
+        public async Task SetFillStyle(string value) => await Reference.SetValueAsync("fillStyle", value);
+
         public string shadowColor { get; set; }
         public string lineCap { get; set; }
         public string lineJoin { get; set; }
@@ -111,7 +116,7 @@ namespace BlazorPractice.Library
         public async Task fill() { }
         public async Task fillText() { }
         public async Task getContextAttributes() { }
-        public async Task getImageData() { }
+        public async Task<ImageData> getImageData(int sx, int sy, int sw, int sh) => await ImageData.Create(async () => await Reference.InvokeAsync<IJSObjectReference>("getImageData", sx, sy, sw, sh));
         public async Task getLineDash() { }
         public async Task getTransform() { }
         public async Task isContextLost() { }
@@ -129,7 +134,7 @@ namespace BlazorPractice.Library
         public async Task clearRect() { }
         public async Task closePath() { }
         public async Task ellipse() { }
-        public async Task fillRect() { }
+        public async Task FillRect(int x, int y, int width, int height) => await Reference.InvokeVoidAsync("fillRect", x, y, width, height);
 
         public async Task LineTo(int x, int y) => await Reference.InvokeVoidAsync("lineTo", x, y);
 
@@ -184,5 +189,23 @@ namespace BlazorPractice.Library
         {
 
         }
+
+        public async Task<uint[]> GetData() => await Reference.GetValueAsync<uint[]>("data");
+
+        public async Task<byte[]> GetData2(IJSRuntime runtime)
+        {
+            var data = await Reference.GetValueAsync<IJSObjectReference>("data");
+            var buffer = await data.GetValueAsync<IJSObjectReference>("buffer");
+            var uint8Array = await runtime.InvokeConstructorAsync("Uint8Array", buffer);
+            return await runtime.InvokeAsync<byte[]>("ReturnSelf", uint8Array);
+        }
+
+        public async Task<string> GetColorSpace() => await Reference.GetValueAsync<string>("colorSpace");
+
+        public async Task<int> GetHeight() => await Reference.GetValueAsync<int>("height");
+
+        public async Task<int> GetWidth() => await Reference.GetValueAsync<int>("width");
+
+        public async Task<string> GetPixelFormat() => await Reference.GetValueAsync<string>("pixelFormat");
     }
 }

@@ -1,5 +1,6 @@
 ﻿@page "/langtons-ant"
 @using BlazorPractice.Library
+@using System.Timers;
 @inject IJSRuntime JS
 
 <PageTitle>Blazor Practice - Langton's Ant</PageTitle>
@@ -18,6 +19,8 @@
         position: absolute;
         top: 10px;
         left: 10px;
+        display:flex;
+        gap: 10px;
     }
 </style>
 <div class="point-display-table-container">
@@ -25,38 +28,90 @@
         <Button Color="ButtonColor.Primary" @onclick="OnShowModalClick">
             <Icon Name="IconName.List" />
         </Button>
+        @if (Status == IconName.Stop || Status == IconName.Pause)
+        {
+            <Button Color="ButtonColor.Primary" @onclick="OnPlayClick">
+                <Icon Name="IconName.Play" />
+            </Button>            
+        }
+        @if (Status == IconName.Play)
+        {
+            <Button Color="ButtonColor.Primary" @onclick="OnPauseClick">
+                <Icon Name="IconName.Pause" />
+            </Button>            
+        }
+        
+        @if (Status == IconName.Pause || Status == IconName.Play)
+        {
+            <Button Color="ButtonColor.Primary" @onclick="OnStopClick">
+                <Icon Name="IconName.Stop" />
+            </Button>            
+        }
     </div>
 </div>
-<Modal @ref="modal" Title="Points" OnHidden="OnModalHidden">
-    <BodyTemplate>
-        <Grid @ref="grid" TItem="Rule" Class="table table-hover table-bordered" DataProvider="EmployeesDataProvider" Responsive="true">
-            <GridColumns>
-                <GridColumn TItem="Rule" HeaderText="Rule">
-                    If Touch Color&nbsp;
-                    <Button style="@($"background: #{context.IfTouchColor.ToString("X6")}; color: #{(16777215 - context.IfTouchColor).ToString("X6")}; font-family: monospace, monospace;")">
-                        #@context.IfTouchColor.ToString("X6")
-                    </Button>
-                    &nbsp;Then&nbsp;
-                    <Button Color="ButtonColor.Light">
-                        <Icon Name="@context.Then" />
-                    </Button>
-                </GridColumn>
-                <GridColumn TItem="Rule">
-                    <Button Color="ButtonColor.None" @onclick="(e => DeleteItem(context))"><Icon Name="IconName.Trash" /></Button>
-                </GridColumn>
-            </GridColumns>
-        </Grid>
-    </BodyTemplate>
-    <FooterTemplate>
-        <Button Color="ButtonColor.None" @onclick="AddNewItem">Add New</Button>
-        <Button Color="ButtonColor.None" @onclick="RandomlizeAll">Randomlize All</Button>
-    </FooterTemplate>
-</Modal>
+@if (Status == IconName.Stop)
+{
+    <Modal @ref="modal" Title="Points" OnHidden="OnModalHidden">
+        <BodyTemplate>
+            <SortableList Class="mb-3" Handle=".bb-sortable-list-handle" TItem="Rule" Data="RuleList" Context="item" OnUpdate="@OnEmployeeListUpdate">
+                <ItemTemplate>
+                    <div class="d-flex justify-content-start align-items-center">
+                        <div class="bb-sortable-list-handle pe-2"><Icon Name="IconName.GripVertical" /></div>
+                        <div class="d-flex align-items-center">
+                            If Touch Color&nbsp;
+                            <Button style="@($"background: #{item.IfTouchColor.ToString("X6")}; color: #{(16777215 - item.IfTouchColor).ToString("X6")}; font-family: monospace, monospace;")" @onclick="@(() => ChangeColor(item))">
+                                #@item.IfTouchColor.ToString("X6")
+                            </Button>
+                            &nbsp;Then&nbsp;
+                            <Button Color="ButtonColor.Light" @onclick="@(() => ChangeDirection(item))">
+                                <Icon Name="@item.Then" />
+                            </Button>
+                        </div>
+                        <Button Color="ButtonColor.Danger" style="margin-left: auto;" @onclick="@(() => DeleteItem(item))">
+                            <Icon Name="IconName.Trash" />
+                        </Button>
+                    </div>
+                </ItemTemplate>
+            </SortableList>
+        </BodyTemplate>
+        <FooterTemplate>
+            <Button Color="ButtonColor.None" @onclick="AddNewItem">Add New</Button>
+            <Button Color="ButtonColor.None" @onclick="RandomlizeAll">Randomlize All</Button>
+        </FooterTemplate>
+    </Modal>            
+}
+@if (Status != IconName.Stop)
+{
+    <Modal @ref="modal" Title="Points" OnHidden="OnModalHidden">
+        <BodyTemplate>
+            <SortableList Class="mb-3" AllowSorting="false" TItem="Rule" Data="RuleList" Context="item" OnUpdate="@OnEmployeeListUpdate">
+                <ItemTemplate>
+                    <div class="d-flex justify-content-start align-items-center">
+                        <div class="bb-sortable-list-handle pe-2"><Icon Name="IconName.None" /></div>
+                        <div class="d-flex align-items-center">
+                            If Touch Color&nbsp;
+                            <Button style="@($"background: #{item.IfTouchColor.ToString("X6")}; color: #{(16777215 - item.IfTouchColor).ToString("X6")}; font-family: monospace, monospace;")">
+                                #@item.IfTouchColor.ToString("X6")
+                            </Button>
+                            &nbsp;Then&nbsp;
+                            <Button Color="ButtonColor.Light">
+                                <Icon Name="@item.Then" />
+                            </Button>
+                        </div>
+                    </div>
+                </ItemTemplate>
+            </SortableList>
+        </BodyTemplate>
+    </Modal>
+}
 <canvas id="@CanvasID" />
-
+<script>
+    function ReturnSelf(self){
+        return self;
+    }
+</script>
 @code {
-
-    private Grid<Rule> grid;
+    private IconName Status;
 
     private class Rule
     {
@@ -69,9 +124,73 @@
     {
         RuleList = new List<Rule>
         {
+            new Rule { IfTouchColor = 16777215, Then = IconName.Arrow90DegRight},
             new Rule { IfTouchColor = 0, Then = IconName.Arrow90DegLeft},
-            new Rule { IfTouchColor = 16777215, Then = IconName.Arrow90DegRight}
         };
+        timer.Interval = 10;
+        timer.Elapsed += async (object? source, ElapsedEventArgs e) =>
+        {
+            var width = (int)await blazorCanvas.GetOffsetWidth();
+            var height = (int)await blazorCanvas.GetOffsetHeight();
+            var blockSize = 5;
+
+            var centerX = (int)width / 2;
+            var lowerBoundX = centerX % blockSize;
+            var upperBoundX = width - (width - lowerBoundX) % blockSize;
+
+            var centerY = (int)height / 2;
+            var lowerBoundY = centerY % blockSize;
+            var upperBoundY = height - (height - lowerBoundY) % blockSize;
+
+            var imageData = await blazorCanvasContext2D.getImageData(currentX, currentY, blockSize, blockSize);
+            var aa = await imageData.GetPixelFormat();
+            var pixel = await imageData.GetData2(JS);
+            var r = pixel[0];
+            var g = pixel[1];
+            var b = pixel[2];
+            var a = pixel[3];
+            var matchRule = RuleList.FirstOrDefault(rule => rule.IfTouchColor == r * 256 * 256 + g * 256 + b);
+            var nextRuleColor = RuleList[(RuleList.IndexOf(matchRule) + 1) % RuleList.Count].IfTouchColor;
+
+            await blazorCanvasContext2D.SetFillStyle($"rgb({(nextRuleColor >> 16) & 0xff} {(nextRuleColor >> 8) & 0xff} {(nextRuleColor >> 0) & 0xff})");
+            await blazorCanvasContext2D.FillRect(currentX, currentY, blockSize, blockSize);
+
+            switch (matchRule.Then)
+            {
+                case IconName.Arrow90DegRight:
+                    currentDirection = (Direction)(((int)currentDirection + 1) % 4);
+                    break;
+                case IconName.Arrow90DegLeft:
+                    currentDirection = (Direction)(((int)currentDirection + 3) % 4);
+                    break;
+            }
+            switch (currentDirection)
+            {
+                case Direction.Up:
+                    currentY -= blockSize;
+                    currentY = currentY % height;
+                    if (currentY < lowerBoundY)
+                        currentY = upperBoundY-blockSize;
+                    break;
+                case Direction.Right:
+                    currentX += blockSize;
+                    if (currentX >= upperBoundX)
+                        currentX = lowerBoundX;
+                    break;
+                case Direction.Down:
+                    currentY += blockSize;
+                    if (currentY >= upperBoundY)
+                        currentY = lowerBoundY;
+                    break;
+                case Direction.Left:
+                    currentX -= blockSize;
+                    if (currentX < lowerBoundX)
+                        currentX = upperBoundX - blockSize;
+                    break;
+            }
+        };
+
+        Status = IconName.Stop;
     }
     private async Task<GridDataProviderResult<Rule>> EmployeesDataProvider(GridDataProviderRequest<Rule> request)
     {
@@ -98,9 +217,57 @@
         await blazorCanvas.SetHeight(await blazorCanvas.GetOffsetHeight());
     }
 
+    private Timer timer = new();
+
+    private int currentX;
+    private int currentY;
+    private Direction currentDirection;
+
+    private async Task OnPlayClick()
+    {
+        if (Status == IconName.Stop)
+        {
+            var firstRule = RuleList.FirstOrDefault();
+            if (firstRule == null)
+                return;
+
+            var width = (int)await blazorCanvas.GetOffsetWidth();
+            var height = (int)await blazorCanvas.GetOffsetHeight();
+
+            await blazorCanvasContext2D.SetFillStyle($"rgb({(firstRule.IfTouchColor >> 16) & 0xff} {(firstRule.IfTouchColor >> 8) & 0xff} {(firstRule.IfTouchColor >> 0) & 0xff})");
+            await blazorCanvasContext2D.FillRect(-1, -1, width + 2, height + 2);
+            var startX = (int)width / 2;
+            var startY = (int)height / 2;
+
+            currentX = startX;
+            currentY = startY;
+            currentDirection = Direction.Left;
+        }
+
+        timer.Start();
+        Status = IconName.Play;
+    }
+
+    private async Task OnPauseClick()
+    {
+        timer.Stop();
+        Status = IconName.Pause;
+    }
+
+    private async Task OnStopClick()
+    {
+        timer.Stop();
+        Status = IconName.Stop;
+    }
+
+    private enum Direction
+    {
+        Up, Right, Down, Left
+    }
+
     private async Task OnModalHidden()
     {
-        await RefreshCanvas();
+
     }
 
     private Modal modal;
@@ -114,23 +281,51 @@
     {
         var random = new Random();
         RuleList.Add(new Rule { IfTouchColor = (int)random.NextInt64(0, 16777215), Then = IconName.Arrow90DegLeft });
-        await grid.RefreshDataAsync();
     }
 
     private async Task DeleteItem(Rule item)
     {
         RuleList.Remove(item);
-        await grid.RefreshDataAsync();
     }
 
     private async Task RandomlizeAll()
     {
         var random = new Random();
-        foreach (var rule in RuleList)
+        foreach(var rule in RuleList)
         {
             rule.IfTouchColor = (int)random.NextInt64(0, 16777215);
             rule.Then = (random.NextInt64(0, 2) % 2 == 0) ? IconName.Arrow90DegLeft : IconName.Arrow90DegRight;
         }
-        await grid.RefreshDataAsync();
+    }
+
+    private void OnEmployeeListUpdate(SortableListEventArgs args)
+    {
+        var itemToMove = RuleList[args.OldIndex];
+
+        RuleList.RemoveAt(args.OldIndex);
+
+        if (args.NewIndex < RuleList.Count)
+            RuleList.Insert(args.NewIndex, itemToMove);
+        else
+            RuleList.Add(itemToMove);
+    }
+
+    private void ChangeDirection(Rule item)
+    {
+        switch (item.Then)
+        {
+            case IconName.Arrow90DegRight:
+                item.Then = IconName.Arrow90DegLeft;
+                break;
+            case IconName.Arrow90DegLeft:
+                item.Then = IconName.Arrow90DegRight;
+                break;
+        }
+    }
+
+    private void ChangeColor(Rule item)
+    {
+        var random = new Random();
+        item.IfTouchColor = (int)random.NextInt64(0, 16777215);
     }
 }
