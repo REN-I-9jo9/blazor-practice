@@ -1,8 +1,8 @@
-﻿@page "/langtons-ant"
+﻿@page "/convex-hull-problem"
 @using BlazorPractice.Library
 @inject IJSRuntime JS
 
-<PageTitle>Blazor Practice - Langton's Ant</PageTitle>
+<PageTitle>Blazor Practice - Convex Hull Problem</PageTitle>
 
 <style>
     canvas {
@@ -29,19 +29,15 @@
 </div>
 <Modal @ref="modal" Title="Points" OnHidden="OnModalHidden">
     <BodyTemplate>
-        <Grid @ref="grid" TItem="Rule" Class="table table-hover table-bordered" DataProvider="EmployeesDataProvider" Responsive="true">
+        <Grid @ref="grid" TItem="Point" Class="table table-hover table-bordered table-striped" DataProvider="EmployeesDataProvider" Responsive="true">
             <GridColumns>
-                <GridColumn TItem="Rule" HeaderText="Rule">
-                    If Touch Color&nbsp;
-                    <Button style="@($"background: #{context.IfTouchColor.ToString("X6")}; color: #{(16777215 - context.IfTouchColor).ToString("X6")}; font-family: monospace, monospace;")">
-                        #@context.IfTouchColor.ToString("X6")
-                    </Button>
-                    &nbsp;Then&nbsp;
-                    <Button Color="ButtonColor.Light">
-                        <Icon Name="@context.Then" />
-                    </Button>
+                <GridColumn TItem="Point" HeaderText="X">
+                    <NumberInput TValue="int" @bind-Value=" @context.X" Placeholder="Enter amount" />
                 </GridColumn>
-                <GridColumn TItem="Rule">
+                <GridColumn TItem="Point" HeaderText="Y">
+                    <NumberInput TValue="int" @bind-Value=" @context.Y" Placeholder="Enter amount" />
+                </GridColumn>
+                <GridColumn TItem="Point">
                     <Button Color="ButtonColor.None" @onclick="(e => DeleteItem(context))"><Icon Name="IconName.Trash" /></Button>
                 </GridColumn>
             </GridColumns>
@@ -56,26 +52,27 @@
 
 @code {
 
-    private Grid<Rule> grid;
+    private Grid<Point> grid;
 
-    private class Rule
+    private class Point
     {
-        public int IfTouchColor;
-        public IconName Then;
+        public int X;
+        public int Y;
     }
     const string CanvasID = "myCanvas";
-    private List<Rule> RuleList;
+    private List<Point> PointList;
     protected override void OnInitialized()
     {
-        RuleList = new List<Rule>
+        PointList = new List<Point>
         {
-            new Rule { IfTouchColor = 0, Then = IconName.Arrow90DegLeft},
-            new Rule { IfTouchColor = 16777215, Then = IconName.Arrow90DegRight}
+            new Point { X = 107, Y = 107},
+            new Point { X = 103, Y = 107},
+            new Point { X = 106, Y = 107}
         };
     }
-    private async Task<GridDataProviderResult<Rule>> EmployeesDataProvider(GridDataProviderRequest<Rule> request)
+    private async Task<GridDataProviderResult<Point>> EmployeesDataProvider(GridDataProviderRequest<Point> request)
     {
-        return await Task.FromResult(request.ApplyTo(RuleList));
+        return await Task.FromResult(request.ApplyTo(PointList));
     }
 
     private BlazorCanvas blazorCanvas;
@@ -89,6 +86,7 @@
             blazorCanvas = await BlazorCanvas.Get(JS, CanvasID);
             await RefreshCanvas();
             blazorCanvasContext2D = await BlazorCanvasContext2D.Get(JS, CanvasID, "2d");
+            await DrawPlane();
         }
     }
 
@@ -98,9 +96,24 @@
         await blazorCanvas.SetHeight(await blazorCanvas.GetOffsetHeight());
     }
 
+    private async Task DrawPlane()
+    {
+        var canvasWidth = (int)await blazorCanvas.GetOffsetWidth();
+        var canvasHeight = (int)await blazorCanvas.GetOffsetHeight();
+
+        await blazorCanvasContext2D.MoveTo(-1, canvasHeight / 2);
+        await blazorCanvasContext2D.LineTo(canvasWidth + 1, canvasHeight / 2);
+        await blazorCanvasContext2D.Stroke();
+
+        await blazorCanvasContext2D.MoveTo(canvasWidth / 2, -1);
+        await blazorCanvasContext2D.LineTo(canvasWidth / 2, canvasHeight + 1);
+        await blazorCanvasContext2D.Stroke();
+    }
+
     private async Task OnModalHidden()
     {
         await RefreshCanvas();
+        await DrawPlane();
     }
 
     private Modal modal;
@@ -112,24 +125,27 @@
 
     private async Task AddNewItem()
     {
-        var random = new Random();
-        RuleList.Add(new Rule { IfTouchColor = (int)random.NextInt64(0, 16777215), Then = IconName.Arrow90DegLeft });
+        PointList.Add(new Point { });
         await grid.RefreshDataAsync();
     }
 
-    private async Task DeleteItem(Rule item)
+    private async Task DeleteItem(Point item)
     {
-        RuleList.Remove(item);
+        PointList.Remove(item);
         await grid.RefreshDataAsync();
     }
 
     private async Task RandomlizeAll()
     {
         var random = new Random();
-        foreach (var rule in RuleList)
+
+        var canvasWidth = (int)await blazorCanvas.GetOffsetWidth();
+        var canvasHeight = (int)await blazorCanvas.GetOffsetHeight();
+
+        foreach (var point in PointList)
         {
-            rule.IfTouchColor = (int)random.NextInt64(0, 16777215);
-            rule.Then = (random.NextInt64(0, 2) % 2 == 0) ? IconName.Arrow90DegLeft : IconName.Arrow90DegRight;
+            point.X = (int)random.NextInt64(-(canvasWidth / 2), canvasWidth / 2);
+            point.Y = (int)random.NextInt64(-(canvasHeight / 2), canvasHeight / 2);
         }
         await grid.RefreshDataAsync();
     }
