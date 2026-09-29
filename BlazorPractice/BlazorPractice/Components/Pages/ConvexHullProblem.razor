@@ -1,4 +1,6 @@
 ﻿@page "/convex-hull-problem"
+@using System.Diagnostics
+@using System.Timers;
 @using BlazorPractice.Library
 @inject IJSRuntime JS
 
@@ -6,114 +8,405 @@
 
 <style>
     canvas {
+        position: absolute;
         width: 100%;
         height: 100%;
     }
 
     .point-display-table-container {
         position: relative;
+        width: 100%;
+        height: 100%;
     }
 
     .point-display-table {
         position: absolute;
         top: 10px;
         left: 10px;
+        display: flex;
+        gap: 10px;
     }
 </style>
 <div class="point-display-table-container">
+    <canvas id="@CoordinateCanvasID" />
+    <canvas id="@PointCanvasID" />
     <div class="point-display-table">
         <Button Color="ButtonColor.Primary" @onclick="OnShowModalClick">
             <Icon Name="IconName.List" />
         </Button>
+        @if (Status == IconName.Stop || Status == IconName.Pause)
+        {
+            <Button Color="ButtonColor.Primary" @onclick="OnPlayClick">
+                Andrew's monotone chain
+            </Button>
+        }
+        @if (Status == IconName.Play)
+        {
+            <Button Color="ButtonColor.Primary" @onclick="OnPauseClick">
+                <Icon Name="IconName.Pause" />
+            </Button>
+        }
+
+        @if (Status == IconName.Pause || Status == IconName.Play)
+        {
+            <Button Color="ButtonColor.Primary" @onclick="OnStopClick">
+                <Icon Name="IconName.Stop" />
+            </Button>
+        }
     </div>
 </div>
-<Modal @ref="modal" Title="Points" OnHidden="OnModalHidden">
-    <BodyTemplate>
-        <Grid @ref="grid" TItem="Point" Class="table table-hover table-bordered table-striped" DataProvider="EmployeesDataProvider" Responsive="true">
-            <GridColumns>
-                <GridColumn TItem="Point" HeaderText="X">
-                    <NumberInput TValue="int" @bind-Value=" @context.X" Placeholder="Enter amount" />
-                </GridColumn>
-                <GridColumn TItem="Point" HeaderText="Y">
-                    <NumberInput TValue="int" @bind-Value=" @context.Y" Placeholder="Enter amount" />
-                </GridColumn>
-                <GridColumn TItem="Point">
-                    <Button Color="ButtonColor.None" @onclick="(e => DeleteItem(context))"><Icon Name="IconName.Trash" /></Button>
-                </GridColumn>
-            </GridColumns>
-        </Grid>
-    </BodyTemplate>
-    <FooterTemplate>
-        <Button Color="ButtonColor.None" @onclick="AddNewItem">Add New</Button>
-        <Button Color="ButtonColor.None" @onclick="RandomlizeAll">Randomlize All</Button>
-    </FooterTemplate>
-</Modal>
-<canvas id="@CanvasID" />
-
+@if (Status == IconName.Stop)
+{
+    <Modal @ref="modal" Title="Points" OnHidden="OnModalHidden">
+        <BodyTemplate>
+            <Grid @ref="grid" TItem="Point" Class="table table-hover table-bordered table-striped" DataProvider="EmployeesDataProvider" Responsive="true">
+                <GridColumns>
+                    <GridColumn TItem="Point" HeaderText="X">
+                        <NumberInput TValue="int" @bind-Value=" @context.X" Placeholder="Enter amount" />
+                    </GridColumn>
+                    <GridColumn TItem="Point" HeaderText="Y">
+                        <NumberInput TValue="int" @bind-Value=" @context.Y" Placeholder="Enter amount" />
+                    </GridColumn>
+                    <GridColumn TItem="Point">
+                        <Button Color="ButtonColor.Danger" @onclick="(e => DeleteItem(context))" Disabled="@(PointList.Count <= 3)"><Icon Name="IconName.Trash" /></Button>
+                    </GridColumn>
+                </GridColumns>
+            </Grid>
+        </BodyTemplate>
+        <FooterTemplate>
+            <Button Color="ButtonColor.None" @onclick="AddNewItem">Add New</Button>
+            <Button Color="ButtonColor.None" @onclick="RandomlizeAll">Randomlize All</Button>
+        </FooterTemplate>
+    </Modal>
+}
+@if (Status != IconName.Stop)
+{
+    <Modal @ref="modal" Title="Points">
+        <BodyTemplate>
+            <Grid @ref="grid" TItem="Point" Class="table table-hover table-bordered table-striped" DataProvider="EmployeesDataProvider" Responsive="true">
+                <GridColumns>
+                    <GridColumn TItem="Point" HeaderText="X">
+                        @context.X
+                    </GridColumn>
+                    <GridColumn TItem="Point" HeaderText="Y">
+                        @context.Y
+                    </GridColumn>
+                </GridColumns>
+            </Grid>
+        </BodyTemplate>
+    </Modal>
+}
 @code {
 
     private Grid<Point> grid;
 
+    [DebuggerDisplay("({X}, {Y})")]
     private class Point
     {
         public int X;
         public int Y;
     }
-    const string CanvasID = "myCanvas";
+    const string CoordinateCanvasID = "myCanvas";
+    const string PointCanvasID = "myCanvas2";
     private List<Point> PointList;
+    private IconName Status;
     protected override void OnInitialized()
     {
         PointList = new List<Point>
         {
-            new Point { X = 107, Y = 107},
-            new Point { X = 103, Y = 107},
-            new Point { X = 106, Y = 107}
+            new Point { X = -300, Y = 0},
+            new Point { X = -200, Y = 100},
+            new Point { X = -100, Y = -100},
+            new Point { X = 100, Y = 100},
+            new Point { X = 200, Y = -100},
+            new Point { X = 300, Y = 0}
+        };
+        Status = IconName.Stop;
+        timer.Interval = 1000;
+        timer.Elapsed += async (object? source, ElapsedEventArgs e) =>
+        {
+            //var list = CaculateResult();
+            //await DrawResult(list);
+            //timer.Stop();
+
+
+            switch (calculateStep)
+            {
+                case CalculateStep.UpperStart:
+                    {
+                        var point = PointList[currentPointListIndex];
+                        if (currentStack.Count <= 2)
+                            calculateStep = CalculateStep.UpperPushCurrentPoint;
+                        else
+                            calculateStep = CalculateStep.UpperGetLastPoint;
+                    }
+                    break;
+                case CalculateStep.UpperGetLastPoint:
+                    {
+                        
+                    }
+                    break;
+                case CalculateStep.UpperGetSecondLastPoint:
+                    {
+
+                    }
+                    break;
+                case CalculateStep.UpperCheckAngle:
+                    {
+
+                    }
+                    break;
+                case CalculateStep.UpperPushCurrentPoint:
+                    {
+                        var point = PointList[currentPointListIndex];
+                        currentStack.Push(point);
+                    }
+                    break;
+                case CalculateStep.LowerStart:
+                    {
+
+                    }
+                    break;
+                case CalculateStep.LowerGetLastPoint:
+                    {
+
+                    }
+                    break;
+                case CalculateStep.LowerGetSecondLastPoint:
+                    {
+
+                    }
+                    break;
+                case CalculateStep.LowerCheckAngle:
+                    {
+
+                    }
+                    break;
+                case CalculateStep.LowerPushCurrentPoint:
+                    {
+
+                    }
+                    break;
+            }
         };
     }
+
+    private async Task OnPlayClick()
+    {
+        if (Status == IconName.Stop)
+        {
+
+        }
+
+        var uStack = CaculateResult();
+        await DrawResult(uStack.ToList());
+
+        currentPointListIndex = 0;
+        calculateStep = CalculateStep.UpperStart;
+        currentStack = new();
+
+        //timer.Start();
+        Status = IconName.Play;
+    }
+
+    private Stack<Point> currentStack = new();
+
+    private CalculateStep calculateStep;
+
+    private int currentPointListIndex;
+
+    enum CalculateStep
+    {
+        UpperStart,
+        UpperGetLastPoint,
+        UpperGetSecondLastPoint,
+        UpperCheckAngle,
+        UpperPushCurrentPoint,
+        LowerStart,
+        LowerGetLastPoint,
+        LowerGetSecondLastPoint,
+        LowerCheckAngle,
+        LowerPushCurrentPoint,
+    }
+
+    private List<Point> CaculateResult()
+    {
+        var uStack = new Stack<Point>();
+        foreach (var point in PointList)
+        {
+            while (uStack.Count >= 2)
+            {
+                var firstLastPoint = uStack.Pop();
+                var secondLastPoint = uStack.Peek();
+                if (Counterwise(secondLastPoint, firstLastPoint, point))
+                {
+                    uStack.Push(firstLastPoint);
+                    break;
+                }
+            }
+            uStack.Push(point);
+        }
+        var lStack = new Stack<Point>();
+        foreach (var point in PointList.Reverse<Point>())
+        {
+            while (lStack.Count >= 2)
+            {
+                var firstLastPoint = lStack.Pop();
+                var secondLastPoint = lStack.Peek();
+                if (Counterwise(secondLastPoint, firstLastPoint, point))
+                {
+                    lStack.Push(firstLastPoint);
+                    break;
+                }
+            }
+            lStack.Push(point);
+        }
+
+        var result = uStack.ToList();
+        result.AddRange(lStack);
+
+        return result;
+    }
+
+    private bool Counterwise(Point point, Point point2, Point point3)
+    {
+        var vector1 = new Point { X = point2.X - point.X, Y = point2.Y - point.Y };
+        var vector2 = new Point { X = point3.X - point2.X, Y = point3.Y - point2.Y };
+
+        var dotProduct = vector1.X * vector2.X + vector1.Y * vector2.Y;
+        var determinant = vector1.X * vector2.Y - vector1.Y * vector2.X;
+        var angle = Math.Atan2(determinant, dotProduct);
+
+        return angle < 0;
+    }
+
+    private async Task DrawResult(List<Point> result)
+    {
+        var canvasWidth = (int)await coordinateCanvas.GetOffsetWidth();
+        var canvasHeight = (int)await coordinateCanvas.GetOffsetHeight();
+        var zeroX = canvasWidth / 2;
+        var zeroY = canvasHeight / 2;
+
+        for (var i = 0; i < result.Count - 1; i++)
+        {
+            var point1 = result[i];
+            var point2 = result[i + 1];
+            await pointCanvasContext2D.MoveTo(zeroX + point1.X, zeroY - point1.Y);
+            await pointCanvasContext2D.LineTo(zeroX + point2.X, zeroY - point2.Y);
+            await pointCanvasContext2D.Stroke();
+        }
+    }
+
     private async Task<GridDataProviderResult<Point>> EmployeesDataProvider(GridDataProviderRequest<Point> request)
     {
         return await Task.FromResult(request.ApplyTo(PointList));
     }
 
-    private BlazorCanvas blazorCanvas;
+    private BlazorCanvas coordinateCanvas;
 
-    private BlazorCanvasContext2D blazorCanvasContext2D;
+    private BlazorCanvasContext2D coordinateCanvasContext2D;
+
+    private BlazorCanvas pointCanvas;
+
+    private BlazorCanvasContext2D pointCanvasContext2D;
 
     protected async override Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
-            blazorCanvas = await BlazorCanvas.Get(JS, CanvasID);
-            await RefreshCanvas();
-            blazorCanvasContext2D = await BlazorCanvasContext2D.Get(JS, CanvasID, "2d");
+            coordinateCanvas = await BlazorCanvas.Get(JS, CoordinateCanvasID);
+            await RefreshCanvas(coordinateCanvas);
+            coordinateCanvasContext2D = await BlazorCanvasContext2D.Get(JS, CoordinateCanvasID, "2d");
             await DrawPlane();
+
+            pointCanvas = await BlazorCanvas.Get(JS, PointCanvasID);
+            await RefreshCanvas(pointCanvas);
+            pointCanvasContext2D = await BlazorCanvasContext2D.Get(JS, PointCanvasID, "2d");
+            await DrawPoint();
         }
     }
 
-    private async Task RefreshCanvas()
+    private async Task RefreshCanvas(BlazorCanvas canvas)
     {
-        await blazorCanvas.SetWidth(await blazorCanvas.GetOffsetWidth());
-        await blazorCanvas.SetHeight(await blazorCanvas.GetOffsetHeight());
+        await canvas.SetWidth(await canvas.GetOffsetWidth());
+        await canvas.SetHeight(await canvas.GetOffsetHeight());
     }
 
     private async Task DrawPlane()
     {
-        var canvasWidth = (int)await blazorCanvas.GetOffsetWidth();
-        var canvasHeight = (int)await blazorCanvas.GetOffsetHeight();
+        var canvasWidth = (int)await coordinateCanvas.GetOffsetWidth();
+        var canvasHeight = (int)await coordinateCanvas.GetOffsetHeight();
 
-        await blazorCanvasContext2D.MoveTo(-1, canvasHeight / 2);
-        await blazorCanvasContext2D.LineTo(canvasWidth + 1, canvasHeight / 2);
-        await blazorCanvasContext2D.Stroke();
+        var zeroX = canvasWidth / 2;
+        var zeroY = canvasHeight / 2;
 
-        await blazorCanvasContext2D.MoveTo(canvasWidth / 2, -1);
-        await blazorCanvasContext2D.LineTo(canvasWidth / 2, canvasHeight + 1);
-        await blazorCanvasContext2D.Stroke();
+        await coordinateCanvasContext2D.FillText($"{0}", zeroX + 2, zeroY - 2);
+
+        await coordinateCanvasContext2D.MoveTo(-1, zeroY);
+        await coordinateCanvasContext2D.LineTo(canvasWidth + 1, zeroY);
+        await coordinateCanvasContext2D.Stroke();
+
+        for (int i = 100; i < zeroX; i += 100)
+        {
+            await coordinateCanvasContext2D.MoveTo(zeroX + i, zeroY - 5);
+            await coordinateCanvasContext2D.LineTo(zeroX + i, zeroY + 5);
+            await coordinateCanvasContext2D.Stroke();
+
+            await coordinateCanvasContext2D.FillText($"{i}", zeroX + i + 2, zeroY - 2);
+
+            await coordinateCanvasContext2D.MoveTo(zeroX - i, zeroY - 5);
+            await coordinateCanvasContext2D.LineTo(zeroX - i, zeroY + 5);
+            await coordinateCanvasContext2D.Stroke();
+
+            await coordinateCanvasContext2D.FillText($"{-i}", zeroX - i + 2, zeroY - 2);
+        }
+
+        await coordinateCanvasContext2D.MoveTo(zeroX, -1);
+        await coordinateCanvasContext2D.LineTo(zeroX, canvasHeight + 1);
+        await coordinateCanvasContext2D.Stroke();
+
+        for (int i = 100; i < zeroY; i += 100)
+        {
+            await coordinateCanvasContext2D.MoveTo(zeroX - 5, zeroY + i);
+            await coordinateCanvasContext2D.LineTo(zeroX + 5, zeroY + i);
+            await coordinateCanvasContext2D.Stroke();
+
+            await coordinateCanvasContext2D.FillText($"{-i}", zeroX + 2, zeroY + i - 2);
+
+            await coordinateCanvasContext2D.MoveTo(zeroX - 5, zeroY - i);
+            await coordinateCanvasContext2D.LineTo(zeroX + 5, zeroY - i);
+            await coordinateCanvasContext2D.Stroke();
+
+            await coordinateCanvasContext2D.FillText($"{i}", zeroX + 2, zeroY - i - 2);
+        }
+    }
+
+    private async Task DrawPoint()
+    {
+        var canvasWidth = (int)await pointCanvas.GetOffsetWidth();
+        var canvasHeight = (int)await pointCanvas.GetOffsetHeight();
+
+        var zeroX = canvasWidth / 2;
+        var zeroY = canvasHeight / 2;
+        var pointSize = 1;
+        var textOffest = 5;
+
+        foreach (var point in PointList)
+        {
+            await pointCanvasContext2D.MoveTo(zeroX + point.X + pointSize, zeroY - point.Y);
+            await pointCanvasContext2D.Arc(zeroX + point.X, zeroY - point.Y, pointSize, 0, 2 * Math.PI);
+            await pointCanvasContext2D.Stroke();
+
+            await pointCanvasContext2D.FillText($"({point.X}, {point.Y})", zeroX + point.X + textOffest, zeroY - point.Y - textOffest);
+        }
     }
 
     private async Task OnModalHidden()
     {
-        await RefreshCanvas();
-        await DrawPlane();
+        PointList = PointList.OrderBy(point => point.X).ThenBy(point => point.Y).ToList();
+        await grid.RefreshDataAsync();
+        await RefreshCanvas(pointCanvas);
+        await DrawPoint();
     }
 
     private Modal modal;
@@ -139,14 +432,28 @@
     {
         var random = new Random();
 
-        var canvasWidth = (int)await blazorCanvas.GetOffsetWidth();
-        var canvasHeight = (int)await blazorCanvas.GetOffsetHeight();
+        var canvasWidth = (int)await coordinateCanvas.GetOffsetWidth();
+        var canvasHeight = (int)await coordinateCanvas.GetOffsetHeight();
 
         foreach (var point in PointList)
         {
-            point.X = (int)random.NextInt64(-(canvasWidth / 2), canvasWidth / 2);
-            point.Y = (int)random.NextInt64(-(canvasHeight / 2), canvasHeight / 2);
+            point.X = (int)random.NextInt64(-(canvasWidth / 2) + 100, canvasWidth / 2 - 100);
+            point.Y = (int)random.NextInt64(-(canvasHeight / 2) + 100, canvasHeight / 2 - 100);
         }
         await grid.RefreshDataAsync();
+    }
+
+    private Timer timer = new();
+
+    private async Task OnPauseClick()
+    {
+        timer.Stop();
+        Status = IconName.Pause;
+    }
+
+    private async Task OnStopClick()
+    {
+        timer.Stop();
+        Status = IconName.Stop;
     }
 }

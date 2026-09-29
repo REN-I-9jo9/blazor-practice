@@ -97,7 +97,11 @@ namespace BlazorPractice.Library
         public decimal shadowOffsetX { get; set; }
         public decimal shadowOffsetY { get; set; }
         public decimal shadowBlur { get; set; }
-        public decimal lineWidth { get; set; }
+
+        public async Task<decimal> GetLineWidth() => await Reference.GetValueAsync<decimal>("lineWidth");
+
+        public async Task SetLineWidth(decimal value) => await Reference.SetValueAsync("lineWidth", value);
+
         public decimal miterLimit { get; set; }
         public decimal lineDashOffset { get; set; }
         public async Task Clip() => await Reference.InvokeVoidAsync("clip");
@@ -114,7 +118,13 @@ namespace BlazorPractice.Library
         public async Task drawFocusIfNeeded() { }
         public async Task drawImage() { }
         public async Task fill() { }
-        public async Task fillText() { }
+        public async Task FillText(string text, int x, int y, int? maxWidth = null)
+        {
+            if (maxWidth == null)
+                await ImageData.Create(async () => await Reference.InvokeAsync<IJSObjectReference>("fillText", text, x, y));
+            else
+                await ImageData.Create(async () => await Reference.InvokeAsync<IJSObjectReference>("fillText", text, x, y, maxWidth));
+        }
         public async Task getContextAttributes() { }
         public async Task<ImageData> getImageData(int sx, int sy, int sw, int sh) => await ImageData.Create(async () => await Reference.InvokeAsync<IJSObjectReference>("getImageData", sx, sy, sw, sh));
         public async Task getLineDash() { }
@@ -127,7 +137,7 @@ namespace BlazorPractice.Library
         public async Task roundRect() { }
         public async Task setLineDash() { }
         public async Task strokeText() { }
-        public async Task arc() { }
+        public async Task Arc(int x, int y, double radius, double startAngle, double endAngle, bool counterclockwise = false) => await Reference.InvokeVoidAsync("arc", x, y, radius, startAngle, endAngle, counterclockwise);
         public async Task arcTo() { }
         public async Task beginPath() { }
         public async Task bezierCurveTo() { }
