@@ -143,7 +143,7 @@
                     break;
                 case CalculateStep.UpperGetLastPoint:
                     {
-                        
+
                     }
                     break;
                 case CalculateStep.UpperGetSecondLastPoint:
@@ -160,6 +160,13 @@
                     {
                         var point = PointList[currentPointListIndex];
                         currentStack.Push(point);
+                        if (currentPointListIndex == PointList.Count - 1)
+                            calculateStep = CalculateStep.LowerStart;
+                        else
+                        {
+                            calculateStep = CalculateStep.UpperStart;
+                            currentPointListIndex++;
+                        }
                     }
                     break;
                 case CalculateStep.LowerStart:
@@ -205,7 +212,7 @@
         calculateStep = CalculateStep.UpperStart;
         currentStack = new();
 
-        //timer.Start();
+        timer.Start();
         Status = IconName.Play;
     }
 
