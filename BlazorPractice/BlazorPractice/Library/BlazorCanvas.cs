@@ -83,7 +83,10 @@ namespace BlazorPractice.Library
         public string globalCompositeOperation { get; set; }
         public string filter { get; set; }
         public string imageSmoothingQuality { get; set; }
-        public string strokeStyle { get; set; }
+
+        public async Task<string> GetStrokeStyle() => await Reference.GetValueAsync<string>("strokeStyle");
+
+        public async Task SetStrokeStyle(string value) => await Reference.SetValueAsync("strokeStyle", value);
 
         public async Task<string> GetFillStyle() => await Reference.GetValueAsync<string>("fillStyle");
 

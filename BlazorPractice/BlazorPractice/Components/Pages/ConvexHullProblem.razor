@@ -30,6 +30,7 @@
 <div class="point-display-table-container">
     <canvas id="@CoordinateCanvasID" />
     <canvas id="@PointCanvasID" />
+    <canvas id="@ResultCanvasID" />
     <div class="point-display-table">
         <Button Color="ButtonColor.Primary" @onclick="OnShowModalClick">
             <Icon Name="IconName.List" />
@@ -106,95 +107,19 @@
         public int X;
         public int Y;
     }
-    const string CoordinateCanvasID = "myCanvas";
-    const string PointCanvasID = "myCanvas2";
+    const string CoordinateCanvasID = "CoordinateCanvasID";
+    const string PointCanvasID = "PointCanvasID";
+    const string ResultCanvasID = "ResultCanvasID";
     private List<Point> PointList;
     private IconName Status;
     protected override void OnInitialized()
     {
-        PointList = new List<Point>
-        {
-            new Point { X = -300, Y = 0},
-            new Point { X = -200, Y = 100},
-            new Point { X = -100, Y = -100},
-            new Point { X = 100, Y = 100},
-            new Point { X = 200, Y = -100},
-            new Point { X = 300, Y = 0}
-        };
+        PointList = Enumerable.Range(0, 15).Select(_ => new Point()).ToList();
+
         Status = IconName.Stop;
         timer.Interval = 1000;
         timer.Elapsed += async (object? source, ElapsedEventArgs e) =>
         {
-            //var list = CaculateResult();
-            //await DrawResult(list);
-            //timer.Stop();
-
-
-            switch (calculateStep)
-            {
-                case CalculateStep.UpperStart:
-                    {
-                        var point = PointList[currentPointListIndex];
-                        if (currentStack.Count <= 2)
-                            calculateStep = CalculateStep.UpperPushCurrentPoint;
-                        else
-                            calculateStep = CalculateStep.UpperGetLastPoint;
-                    }
-                    break;
-                case CalculateStep.UpperGetLastPoint:
-                    {
-
-                    }
-                    break;
-                case CalculateStep.UpperGetSecondLastPoint:
-                    {
-
-                    }
-                    break;
-                case CalculateStep.UpperCheckAngle:
-                    {
-
-                    }
-                    break;
-                case CalculateStep.UpperPushCurrentPoint:
-                    {
-                        var point = PointList[currentPointListIndex];
-                        currentStack.Push(point);
-                        if (currentPointListIndex == PointList.Count - 1)
-                            calculateStep = CalculateStep.LowerStart;
-                        else
-                        {
-                            calculateStep = CalculateStep.UpperStart;
-                            currentPointListIndex++;
-                        }
-                    }
-                    break;
-                case CalculateStep.LowerStart:
-                    {
-
-                    }
-                    break;
-                case CalculateStep.LowerGetLastPoint:
-                    {
-
-                    }
-                    break;
-                case CalculateStep.LowerGetSecondLastPoint:
-                    {
-
-                    }
-                    break;
-                case CalculateStep.LowerCheckAngle:
-                    {
-
-                    }
-                    break;
-                case CalculateStep.LowerPushCurrentPoint:
-                    {
-
-                    }
-                    break;
-            }
         };
     }
 
@@ -205,35 +130,8 @@
 
         }
 
-        var uStack = CaculateResult();
-        await DrawResult(uStack.ToList());
-
-        currentPointListIndex = 0;
-        calculateStep = CalculateStep.UpperStart;
-        currentStack = new();
-
         timer.Start();
         Status = IconName.Play;
-    }
-
-    private Stack<Point> currentStack = new();
-
-    private CalculateStep calculateStep;
-
-    private int currentPointListIndex;
-
-    enum CalculateStep
-    {
-        UpperStart,
-        UpperGetLastPoint,
-        UpperGetSecondLastPoint,
-        UpperCheckAngle,
-        UpperPushCurrentPoint,
-        LowerStart,
-        LowerGetLastPoint,
-        LowerGetSecondLastPoint,
-        LowerCheckAngle,
-        LowerPushCurrentPoint,
     }
 
     private List<Point> CaculateResult()
@@ -317,6 +215,10 @@
 
     private BlazorCanvasContext2D pointCanvasContext2D;
 
+    private BlazorCanvas resultCanvas;
+
+    private BlazorCanvasContext2D resultCanvasContext2D;
+
     protected async override Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
@@ -330,6 +232,10 @@
             await RefreshCanvas(pointCanvas);
             pointCanvasContext2D = await BlazorCanvasContext2D.Get(JS, PointCanvasID, "2d");
             await DrawPoint();
+
+            resultCanvas = await BlazorCanvas.Get(JS, ResultCanvasID);
+            await RefreshCanvas(resultCanvas);
+            resultCanvasContext2D = await BlazorCanvasContext2D.Get(JS, ResultCanvasID, "2d");
         }
     }
 
