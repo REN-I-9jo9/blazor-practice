@@ -117,12 +117,21 @@
         PointList = Enumerable.Range(0, 15).Select(_ => new Point()).ToList();
 
         Status = IconName.Stop;
-        timer.Interval = 1000;
+        timer.Interval = 100;
         stepObject = null;
         timer.Elapsed += async (object? source, ElapsedEventArgs e) =>
         {
             stepObject = RunStep(stepObject);
             await DrawResult(stepObject);
+            if (stepObject?.step == Step.Done)
+            {
+                timer.Stop();
+                await InvokeAsync(() =>
+                {
+                    Status = IconName.Stop;
+                    StateHasChanged();
+                });
+            }
         };
     }
 
@@ -135,61 +144,66 @@
             return new StepObject
             {
                 previousStep = null,
-                step = Step.GetCurrentPoint,
-                stack = new Stack<Point>(),
+                step = Step.UpperGetCurrentPoint,
+                upperStack = new Stack<Point>(),
+                lowerStack = new Stack<Point>(),
                 Index = 0
             };
         }
 
         switch (stepObject.step)
         {
-            case Step.GetCurrentPoint:
+            case Step.UpperGetCurrentPoint:
                 {
                     var point = PointList[stepObject.Index];
-                    if (stepObject.stack.Count >= 2)
+                    if (stepObject.upperStack.Count >= 2)
                         return new StepObject
                         {
-                            previousStep = Step.GetCurrentPoint,
-                            step = Step.GetPrevious2point,
-                            stack = stepObject.stack,
+                            previousStep = Step.UpperGetCurrentPoint,
+                            step = Step.UpperGetPrevious2point,
+                            upperStack = stepObject.upperStack,
+                            lowerStack = stepObject.lowerStack,
                             Index = stepObject.Index,
                             currentPoint = point
                         };
                     else
                         return new StepObject
                         {
-                            previousStep = Step.GetCurrentPoint,
-                            step = Step.PushCurrentPoint,
-                            stack = stepObject.stack,
+                            previousStep = Step.UpperGetCurrentPoint,
+                            step = Step.UpperPushCurrentPoint,
+                            upperStack = stepObject.upperStack,
+                            lowerStack = stepObject.lowerStack,
                             Index = stepObject.Index,
                             currentPoint = point
                         };
                 }
-            case Step.GetPrevious2point:
+            case Step.UpperGetPrevious2point:
                 {
-                    var firstLastPoint = stepObject.stack.Pop();
-                    var secondLastPoint = stepObject.stack.Peek();
+                    var firstLastPoint = stepObject.upperStack.Pop();
+                    var secondLastPoint = stepObject.upperStack.Peek();
                     return new StepObject
                     {
-                        previousStep = Step.GetPrevious2point,
-                        step = Step.GetAngle,
-                        stack = stepObject.stack,
+                        previousStep = Step.UpperGetPrevious2point,
+                        step = Step.UpperGetAngle,
+                        upperStack = stepObject.upperStack,
+                        lowerStack = stepObject.lowerStack,
                         Index = stepObject.Index,
                         currentPoint = stepObject.currentPoint,
                         firstLastPoint = firstLastPoint,
                         secondLastPoint = secondLastPoint
                     };
                 }
-            case Step.GetAngle:
+            case Step.UpperGetAngle:
                 {
                     if (Counterwise(stepObject.secondLastPoint, stepObject.firstLastPoint, stepObject.currentPoint, out _))
                     {
-                        stepObject.stack.Push(stepObject.firstLastPoint);
+                        stepObject.upperStack.Push(stepObject.firstLastPoint);
                         return new StepObject
                         {
-                            previousStep = Step.GetAngle,
-                            step = Step.PushCurrentPoint,
-                            stack = stepObject.stack,
+                            previousStep = Step.UpperGetAngle,
+                            step = Step.UpperPushCurrentPoint,
+                            upperStack = stepObject.upperStack,
+                            lowerStack = stepObject.lowerStack,
                             Index = stepObject.Index,
                             currentPoint = stepObject.currentPoint,
                             firstLastPoint = stepObject.firstLastPoint,
@@ -198,12 +212,13 @@
                     }
                     else
                     {
-                        if (stepObject.stack.Count >= 2)
+                        if (stepObject.upperStack.Count >= 2)
                             return new StepObject
                             {
-                                previousStep = Step.GetAngle,
-                                step = Step.GetPrevious2point,
-                                stack = stepObject.stack,
+                                previousStep = Step.UpperGetAngle,
+                                step = Step.UpperGetPrevious2point,
+                                upperStack = stepObject.upperStack,
+                                lowerStack = stepObject.lowerStack,
                                 Index = stepObject.Index,
                                 currentPoint = stepObject.currentPoint,
                                 firstLastPoint = stepObject.firstLastPoint,
@@ -212,9 +227,10 @@
                         else
                             return new StepObject
                             {
-                                previousStep = Step.GetAngle,
-                                step = Step.PushCurrentPoint,
-                                stack = stepObject.stack,
+                                previousStep = Step.UpperGetAngle,
+                                step = Step.UpperPushCurrentPoint,
+                                upperStack = stepObject.upperStack,
+                                lowerStack = stepObject.lowerStack,
                                 Index = stepObject.Index,
                                 currentPoint = stepObject.currentPoint,
                                 firstLastPoint = stepObject.firstLastPoint,
@@ -222,26 +238,137 @@
                             };
                     }
                 }
-                break;
-            case Step.PushCurrentPoint:
+            case Step.UpperPushCurrentPoint:
                 {
-                    stepObject.stack.Push(stepObject.currentPoint);
+                    stepObject.upperStack.Push(stepObject.currentPoint);
                     var newIndex = stepObject.Index + 1;
                     if (newIndex >= PointList.Count)
                         return new StepObject
                         {
-                            previousStep = Step.PushCurrentPoint,
-                            step = Step.Done,
-                            stack = stepObject.stack,
+                            previousStep = Step.UpperPushCurrentPoint,
+                            step = Step.LowerGetCurrentPoint,
+                            upperStack = stepObject.upperStack,
+                            lowerStack = stepObject.lowerStack,
                             Index = stepObject.Index,
                             currentPoint = stepObject.currentPoint,
                         };
                     else
                         return new StepObject
                         {
-                            previousStep = Step.PushCurrentPoint,
-                            step = Step.GetCurrentPoint,
-                            stack = stepObject.stack,
+                            previousStep = Step.UpperPushCurrentPoint,
+                            step = Step.UpperGetCurrentPoint,
+                            upperStack = stepObject.upperStack,
+                            lowerStack = stepObject.lowerStack,
+                            Index = newIndex,
+                            currentPoint = stepObject.currentPoint,
+                        };
+                }
+            case Step.LowerGetCurrentPoint:
+                {
+                    var point = PointList[stepObject.Index];
+                    if (stepObject.lowerStack.Count >= 2)
+                        return new StepObject
+                        {
+                            previousStep = Step.LowerGetCurrentPoint,
+                            step = Step.LowerGetPrevious2point,
+                            upperStack = stepObject.upperStack,
+                            lowerStack = stepObject.lowerStack,
+                            Index = stepObject.Index,
+                            currentPoint = point
+                        };
+                    else
+                        return new StepObject
+                        {
+                            previousStep = Step.LowerGetCurrentPoint,
+                            step = Step.LowerPushCurrentPoint,
+                            upperStack = stepObject.upperStack,
+                            lowerStack = stepObject.lowerStack,
+                            Index = stepObject.Index,
+                            currentPoint = point
+                        };
+                }
+            case Step.LowerGetPrevious2point:
+                {
+                    var firstLastPoint = stepObject.lowerStack.Pop();
+                    var secondLastPoint = stepObject.lowerStack.Peek();
+                    return new StepObject
+                    {
+                        previousStep = Step.LowerGetPrevious2point,
+                        step = Step.LowerGetAngle,
+                        upperStack = stepObject.upperStack,
+                        lowerStack = stepObject.lowerStack,
+                        Index = stepObject.Index,
+                        currentPoint = stepObject.currentPoint,
+                        firstLastPoint = firstLastPoint,
+                        secondLastPoint = secondLastPoint
+                    };
+                }
+            case Step.LowerGetAngle:
+                {
+                    if (Counterwise(stepObject.secondLastPoint, stepObject.firstLastPoint, stepObject.currentPoint, out _))
+                    {
+                        stepObject.lowerStack.Push(stepObject.firstLastPoint);
+                        return new StepObject
+                        {
+                            previousStep = Step.LowerGetAngle,
+                            step = Step.LowerPushCurrentPoint,
+                            upperStack = stepObject.upperStack,
+                            lowerStack = stepObject.lowerStack,
+                            Index = stepObject.Index,
+                            currentPoint = stepObject.currentPoint,
+                            firstLastPoint = stepObject.firstLastPoint,
+                            secondLastPoint = stepObject.secondLastPoint
+                        };
+                    }
+                    else
+                    {
+                        if (stepObject.lowerStack.Count >= 2)
+                            return new StepObject
+                            {
+                                previousStep = Step.LowerGetAngle,
+                                step = Step.LowerGetPrevious2point,
+                                upperStack = stepObject.upperStack,
+                                lowerStack = stepObject.lowerStack,
+                                Index = stepObject.Index,
+                                currentPoint = stepObject.currentPoint,
+                                firstLastPoint = stepObject.firstLastPoint,
+                                secondLastPoint = stepObject.secondLastPoint
+                            };
+                        else
+                            return new StepObject
+                            {
+                                previousStep = Step.LowerGetAngle,
+                                step = Step.LowerPushCurrentPoint,
+                                upperStack = stepObject.upperStack,
+                                lowerStack = stepObject.lowerStack,
+                                Index = stepObject.Index,
+                                currentPoint = stepObject.currentPoint,
+                                firstLastPoint = stepObject.firstLastPoint,
+                                secondLastPoint = stepObject.secondLastPoint
+                            };
+                    }
+                }
+            case Step.LowerPushCurrentPoint:
+                {
+                    stepObject.lowerStack.Push(stepObject.currentPoint);
+                    var newIndex = stepObject.Index - 1;
+                    if (newIndex < 0)
+                        return new StepObject
+                        {
+                            previousStep = Step.LowerPushCurrentPoint,
+                            step = Step.Done,
+                            upperStack = stepObject.upperStack,
+                            lowerStack = stepObject.lowerStack,
+                            Index = stepObject.Index,
+                            currentPoint = stepObject.currentPoint,
+                        };
+                    else
+                        return new StepObject
+                        {
+                            previousStep = Step.LowerPushCurrentPoint,
+                            step = Step.LowerGetCurrentPoint,
+                            upperStack = stepObject.upperStack,
+                            lowerStack = stepObject.lowerStack,
                             Index = newIndex,
                             currentPoint = stepObject.currentPoint,
                         };
@@ -251,7 +378,8 @@
                 {
                     previousStep = stepObject.step,
                     step = stepObject.step,
-                    stack = stepObject.stack,
+                    upperStack = stepObject.upperStack,
+                    lowerStack = stepObject.lowerStack,
                     Index = stepObject.Index,
                     currentPoint = stepObject.currentPoint,
                     firstLastPoint = stepObject.firstLastPoint,
@@ -262,10 +390,14 @@
 
     public enum Step
     {
-        GetCurrentPoint,
-        GetPrevious2point,
-        GetAngle,
-        PushCurrentPoint,
+        UpperGetCurrentPoint,
+        UpperGetPrevious2point,
+        UpperGetAngle,
+        UpperPushCurrentPoint,
+        LowerGetCurrentPoint,
+        LowerGetPrevious2point,
+        LowerGetAngle,
+        LowerPushCurrentPoint,
         Done
     }
 
@@ -273,7 +405,8 @@
     {
         public Step? previousStep;
         public Step step;
-        public Stack<Point> stack;
+        public Stack<Point> upperStack;
+        public Stack<Point> lowerStack;
         public int Index;
         public Point currentPoint;
         public Point firstLastPoint;
@@ -314,11 +447,23 @@
         var zeroX = canvasWidth / 2;
         var zeroY = canvasHeight / 2;
 
-        var result = stepObject.stack.ToList();
-        result.Reverse();
-
         await RefreshCanvas(resultCanvas);
         await resultCanvasContext2D.SetStrokeStyle("rgb(0 0 0)");
+
+        var result = stepObject.upperStack.ToList();
+        result.Reverse();
+        for (var i = 0; i < result.Count - 1; i++)
+        {
+            var point1 = result[i];
+            var point2 = result[i + 1];
+            await resultCanvasContext2D.BeginPath();
+            await resultCanvasContext2D.MoveTo(zeroX + point1.X, zeroY - point1.Y);
+            await resultCanvasContext2D.LineTo(zeroX + point2.X, zeroY - point2.Y);
+            await resultCanvasContext2D.Stroke();
+        }
+
+        result = stepObject.lowerStack.ToList();
+        result.Reverse();
         for (var i = 0; i < result.Count - 1; i++)
         {
             var point1 = result[i];
@@ -342,9 +487,11 @@
             await resultCanvasContext2D.Stroke();
             switch (stepObject.previousStep)
             {
-                case Step.GetCurrentPoint:
+                case Step.UpperGetCurrentPoint:
+                case Step.LowerGetCurrentPoint:
                     break;
-                case Step.GetPrevious2point:
+                case Step.UpperGetPrevious2point:
+                case Step.LowerGetPrevious2point:
                     await resultCanvasContext2D.SetStrokeStyle("rgb(0 0 256)");
                     await resultCanvasContext2D.BeginPath();
                     await resultCanvasContext2D.MoveTo(zeroX + firstLastPoint.X + 5, zeroY - firstLastPoint.Y);
@@ -359,8 +506,8 @@
                     await resultCanvasContext2D.LineTo(zeroX + firstLastPoint.X, zeroY - firstLastPoint.Y);
                     await resultCanvasContext2D.Stroke();
                     break;
-                case Step.GetAngle:
-
+                case Step.UpperGetAngle:
+                case Step.LowerGetAngle:
                     var isCounterWise = Counterwise(secondLastPoint, firstLastPoint, currentPoint, out _);
                     var vector1 = new Point { X = firstLastPoint.X - secondLastPoint.X, Y = firstLastPoint.Y - secondLastPoint.Y };
                     var angle1 = CaculateAngle(vector1, new Point { X = 1, Y = 0 });
@@ -394,7 +541,8 @@
                     await resultCanvasContext2D.LineTo(zeroX + firstLastPoint.X, zeroY - firstLastPoint.Y);
                     await resultCanvasContext2D.Stroke();
                     break;
-                case Step.PushCurrentPoint:
+                case Step.UpperPushCurrentPoint:
+                case Step.LowerPushCurrentPoint:
                     break;
                 default:
                     break;
