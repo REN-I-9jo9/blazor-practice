@@ -1,0 +1,81 @@
+﻿@page "/mandelbrot-set"
+@using BlazorPractice.Library
+@inject IJSRuntime JS
+
+<PageTitle>Blazor Practice - Mandelbrot Set</PageTitle>
+
+<style>
+    canvas {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+    }
+
+    .point-display-table-container {
+        position: relative;
+        width: 100%;
+        height: 100%;
+    }
+
+    .point-display-table {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        display: flex;
+        gap: 10px;
+    }
+</style>
+<div class="point-display-table-container">
+    <canvas id="@CanvasID" />
+    <div class="point-display-table">
+        <Button Color="ButtonColor.Primary" @onclick="OnShowModalClick">
+            <Icon Name="IconName.List" />
+        </Button>
+    </div>
+</div>
+<Modal @ref="modal" Title="Title" OnHidden="OnModalHidden">
+    <BodyTemplate>
+        
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button Color="ButtonColor.None">Button</Button>
+    </FooterTemplate>
+</Modal>
+@code {
+    const string CanvasID = "CoordinateCanvasID";
+    protected override void OnInitialized()
+    {
+    }
+
+    private BlazorCanvas canvas;
+
+    private BlazorCanvasContext2D canvasContext2D;
+
+    private Modal modal;
+
+    protected async override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            canvas = await BlazorCanvas.Get(JS, CanvasID);
+            await RefreshCanvas(canvas);
+            canvasContext2D = await BlazorCanvasContext2D.Get(JS, CanvasID, "2d");
+        }
+    }
+
+    private async Task RefreshCanvas(BlazorCanvas canvas)
+    {
+        await canvas.SetWidth(await canvas.GetOffsetWidth());
+        await canvas.SetHeight(await canvas.GetOffsetHeight());
+    }
+
+    private async Task OnShowModalClick()
+    {
+        await modal?.ShowAsync();
+    }
+
+    private async Task OnModalHidden()
+    {
+        
+    }
+}
