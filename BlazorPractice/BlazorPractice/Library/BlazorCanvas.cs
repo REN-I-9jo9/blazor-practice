@@ -142,7 +142,7 @@ namespace BlazorPractice.Library
         public async Task strokeText() { }
         public async Task Arc(int x, int y, double radius, double startAngle, double endAngle, bool counterclockwise = false) => await Reference.InvokeVoidAsync("arc", x, y, radius, startAngle, endAngle, counterclockwise);
         public async Task arcTo() { }
-        public async Task beginPath() { }
+        public async Task BeginPath() => await Reference.InvokeVoidAsync("beginPath");
         public async Task bezierCurveTo() { }
         public async Task clearRect() { }
         public async Task closePath() { }

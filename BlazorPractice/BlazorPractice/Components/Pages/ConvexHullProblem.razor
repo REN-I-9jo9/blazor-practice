@@ -29,8 +29,8 @@
 </style>
 <div class="point-display-table-container">
     <canvas id="@CoordinateCanvasID" />
-    <canvas id="@PointCanvasID" />
     <canvas id="@ResultCanvasID" />
+    <canvas id="@PointCanvasID" />
     <div class="point-display-table">
         <Button Color="ButtonColor.Primary" @onclick="OnShowModalClick">
             <Icon Name="IconName.List" />
@@ -118,9 +118,166 @@
 
         Status = IconName.Stop;
         timer.Interval = 1000;
+        stepObject = null;
         timer.Elapsed += async (object? source, ElapsedEventArgs e) =>
         {
+            stepObject = RunStep(stepObject);
+            await DrawResult(stepObject);
         };
+    }
+
+    private StepObject stepObject = null;
+
+    private StepObject RunStep(StepObject stepObject = null)
+    {
+        if (stepObject == null)
+        {
+            return new StepObject
+            {
+                previousStep = null,
+                step = Step.GetCurrentPoint,
+                stack = new Stack<Point>(),
+                Index = 0
+            };
+        }
+
+        switch (stepObject.step)
+        {
+            case Step.GetCurrentPoint:
+                {
+                    var point = PointList[stepObject.Index];
+                    if (stepObject.stack.Count >= 2)
+                        return new StepObject
+                        {
+                            previousStep = Step.GetCurrentPoint,
+                            step = Step.GetPrevious2point,
+                            stack = stepObject.stack,
+                            Index = stepObject.Index,
+                            currentPoint = point
+                        };
+                    else
+                        return new StepObject
+                        {
+                            previousStep = Step.GetCurrentPoint,
+                            step = Step.PushCurrentPoint,
+                            stack = stepObject.stack,
+                            Index = stepObject.Index,
+                            currentPoint = point
+                        };
+                }
+            case Step.GetPrevious2point:
+                {
+                    var firstLastPoint = stepObject.stack.Pop();
+                    var secondLastPoint = stepObject.stack.Peek();
+                    return new StepObject
+                    {
+                        previousStep = Step.GetPrevious2point,
+                        step = Step.GetAngle,
+                        stack = stepObject.stack,
+                        Index = stepObject.Index,
+                        currentPoint = stepObject.currentPoint,
+                        firstLastPoint = firstLastPoint,
+                        secondLastPoint = secondLastPoint
+                    };
+                }
+            case Step.GetAngle:
+                {
+                    if (Counterwise(stepObject.secondLastPoint, stepObject.firstLastPoint, stepObject.currentPoint, out _))
+                    {
+                        stepObject.stack.Push(stepObject.firstLastPoint);
+                        return new StepObject
+                        {
+                            previousStep = Step.GetAngle,
+                            step = Step.PushCurrentPoint,
+                            stack = stepObject.stack,
+                            Index = stepObject.Index,
+                            currentPoint = stepObject.currentPoint,
+                            firstLastPoint = stepObject.firstLastPoint,
+                            secondLastPoint = stepObject.secondLastPoint
+                        };
+                    }
+                    else
+                    {
+                        if (stepObject.stack.Count >= 2)
+                            return new StepObject
+                            {
+                                previousStep = Step.GetAngle,
+                                step = Step.GetPrevious2point,
+                                stack = stepObject.stack,
+                                Index = stepObject.Index,
+                                currentPoint = stepObject.currentPoint,
+                                firstLastPoint = stepObject.firstLastPoint,
+                                secondLastPoint = stepObject.secondLastPoint
+                            };
+                        else
+                            return new StepObject
+                            {
+                                previousStep = Step.GetAngle,
+                                step = Step.PushCurrentPoint,
+                                stack = stepObject.stack,
+                                Index = stepObject.Index,
+                                currentPoint = stepObject.currentPoint,
+                                firstLastPoint = stepObject.firstLastPoint,
+                                secondLastPoint = stepObject.secondLastPoint
+                            };
+                    }
+                }
+                break;
+            case Step.PushCurrentPoint:
+                {
+                    stepObject.stack.Push(stepObject.currentPoint);
+                    var newIndex = stepObject.Index + 1;
+                    if (newIndex >= PointList.Count)
+                        return new StepObject
+                        {
+                            previousStep = Step.PushCurrentPoint,
+                            step = Step.Done,
+                            stack = stepObject.stack,
+                            Index = stepObject.Index,
+                            currentPoint = stepObject.currentPoint,
+                        };
+                    else
+                        return new StepObject
+                        {
+                            previousStep = Step.PushCurrentPoint,
+                            step = Step.GetCurrentPoint,
+                            stack = stepObject.stack,
+                            Index = newIndex,
+                            currentPoint = stepObject.currentPoint,
+                        };
+                }
+            default:
+                return new StepObject
+                {
+                    previousStep = stepObject.step,
+                    step = stepObject.step,
+                    stack = stepObject.stack,
+                    Index = stepObject.Index,
+                    currentPoint = stepObject.currentPoint,
+                    firstLastPoint = stepObject.firstLastPoint,
+                    secondLastPoint = stepObject.secondLastPoint
+                };
+        }
+    }
+
+    public enum Step
+    {
+        GetCurrentPoint,
+        GetPrevious2point,
+        GetAngle,
+        PushCurrentPoint,
+        Done
+    }
+
+    private class StepObject
+    {
+        public Step? previousStep;
+        public Step step;
+        public Stack<Point> stack;
+        public int Index;
+        public Point currentPoint;
+        public Point firstLastPoint;
+        public Point secondLastPoint;
     }
 
     private async Task OnPlayClick()
@@ -134,71 +291,114 @@
         Status = IconName.Play;
     }
 
-    private List<Point> CaculateResult()
-    {
-        var uStack = new Stack<Point>();
-        foreach (var point in PointList)
-        {
-            while (uStack.Count >= 2)
-            {
-                var firstLastPoint = uStack.Pop();
-                var secondLastPoint = uStack.Peek();
-                if (Counterwise(secondLastPoint, firstLastPoint, point))
-                {
-                    uStack.Push(firstLastPoint);
-                    break;
-                }
-            }
-            uStack.Push(point);
-        }
-        var lStack = new Stack<Point>();
-        foreach (var point in PointList.Reverse<Point>())
-        {
-            while (lStack.Count >= 2)
-            {
-                var firstLastPoint = lStack.Pop();
-                var secondLastPoint = lStack.Peek();
-                if (Counterwise(secondLastPoint, firstLastPoint, point))
-                {
-                    lStack.Push(firstLastPoint);
-                    break;
-                }
-            }
-            lStack.Push(point);
-        }
-
-        var result = uStack.ToList();
-        result.AddRange(lStack);
-
-        return result;
-    }
-
-    private bool Counterwise(Point point, Point point2, Point point3)
+    private bool Counterwise(Point point, Point point2, Point point3, out double angle)
     {
         var vector1 = new Point { X = point2.X - point.X, Y = point2.Y - point.Y };
         var vector2 = new Point { X = point3.X - point2.X, Y = point3.Y - point2.Y };
-
-        var dotProduct = vector1.X * vector2.X + vector1.Y * vector2.Y;
-        var determinant = vector1.X * vector2.Y - vector1.Y * vector2.X;
-        var angle = Math.Atan2(determinant, dotProduct);
+        angle = CaculateAngle(vector1, vector2);
 
         return angle < 0;
     }
 
-    private async Task DrawResult(List<Point> result)
+    private double CaculateAngle(Point vector1, Point vector2)
+    {
+        var dotProduct = vector1.X * vector2.X + vector1.Y * vector2.Y;
+        var determinant = vector1.X * vector2.Y - vector1.Y * vector2.X;
+        return Math.Atan2(determinant, dotProduct);
+    }
+
+    private async Task DrawResult(StepObject stepObject)
     {
         var canvasWidth = (int)await coordinateCanvas.GetOffsetWidth();
         var canvasHeight = (int)await coordinateCanvas.GetOffsetHeight();
         var zeroX = canvasWidth / 2;
         var zeroY = canvasHeight / 2;
 
+        var result = stepObject.stack.ToList();
+        result.Reverse();
+
+        await RefreshCanvas(resultCanvas);
+        await resultCanvasContext2D.SetStrokeStyle("rgb(0 0 0)");
         for (var i = 0; i < result.Count - 1; i++)
         {
             var point1 = result[i];
             var point2 = result[i + 1];
-            await pointCanvasContext2D.MoveTo(zeroX + point1.X, zeroY - point1.Y);
-            await pointCanvasContext2D.LineTo(zeroX + point2.X, zeroY - point2.Y);
-            await pointCanvasContext2D.Stroke();
+            await resultCanvasContext2D.BeginPath();
+            await resultCanvasContext2D.MoveTo(zeroX + point1.X, zeroY - point1.Y);
+            await resultCanvasContext2D.LineTo(zeroX + point2.X, zeroY - point2.Y);
+            await resultCanvasContext2D.Stroke();
+        }
+
+        var currentPoint = stepObject.currentPoint;
+        var firstLastPoint = stepObject.firstLastPoint;
+        var secondLastPoint = stepObject.secondLastPoint;
+
+        if (currentPoint != null)
+        {
+            await resultCanvasContext2D.SetStrokeStyle("rgb(0 0 256)");
+            await resultCanvasContext2D.BeginPath();
+            await resultCanvasContext2D.MoveTo(zeroX + currentPoint.X+5, zeroY - currentPoint.Y );
+            await resultCanvasContext2D.Arc(zeroX + currentPoint.X, zeroY - currentPoint.Y, 5, 0, 180 / Math.PI);
+            await resultCanvasContext2D.Stroke();
+            switch (stepObject.previousStep)
+            {
+                case Step.GetCurrentPoint:
+                    break;
+                case Step.GetPrevious2point:
+                    await resultCanvasContext2D.SetStrokeStyle("rgb(0 0 256)");
+                    await resultCanvasContext2D.BeginPath();
+                    await resultCanvasContext2D.MoveTo(zeroX + firstLastPoint.X + 5, zeroY - firstLastPoint.Y);
+                    await resultCanvasContext2D.Arc(zeroX + firstLastPoint.X, zeroY - firstLastPoint.Y, 5, 0, 180 / Math.PI);
+                    await resultCanvasContext2D.Stroke();
+                    await resultCanvasContext2D.BeginPath();
+                    await resultCanvasContext2D.MoveTo(zeroX + secondLastPoint.X + 5, zeroY - secondLastPoint.Y);
+                    await resultCanvasContext2D.Arc(zeroX + secondLastPoint.X, zeroY - secondLastPoint.Y, 5, 0, 180 / Math.PI);
+                    await resultCanvasContext2D.Stroke();
+                    await resultCanvasContext2D.BeginPath();
+                    await resultCanvasContext2D.MoveTo(zeroX + secondLastPoint.X, zeroY - secondLastPoint.Y);
+                    await resultCanvasContext2D.LineTo(zeroX + firstLastPoint.X, zeroY - firstLastPoint.Y);
+                    await resultCanvasContext2D.Stroke();
+                    break;
+                case Step.GetAngle:
+
+                    var isCounterWise = Counterwise(secondLastPoint, firstLastPoint, currentPoint, out _);
+                    var vector1 = new Point { X = firstLastPoint.X - secondLastPoint.X, Y = firstLastPoint.Y - secondLastPoint.Y };
+                    var angle1 = CaculateAngle(vector1, new Point { X = 1, Y = 0 });
+                    var vector2 = new Point { X = currentPoint.X - firstLastPoint.X, Y = currentPoint.Y - firstLastPoint.Y };
+                    var angle2 = CaculateAngle(vector2, new Point { X = 1, Y = 0 });
+                    if (isCounterWise)
+                        await resultCanvasContext2D.SetStrokeStyle("rgb(0 256 0)");
+                    else
+                        await resultCanvasContext2D.SetStrokeStyle("rgb(256 0 0)");
+                    await resultCanvasContext2D.BeginPath();
+                    await resultCanvasContext2D.MoveTo(zeroX + firstLastPoint.X, zeroY - firstLastPoint.Y);
+                    await resultCanvasContext2D.Arc(zeroX + firstLastPoint.X, zeroY - firstLastPoint.Y, 20, angle1, angle2, !isCounterWise);
+                    await resultCanvasContext2D.Stroke();
+
+                    await resultCanvasContext2D.BeginPath();
+                    await resultCanvasContext2D.MoveTo(zeroX + firstLastPoint.X, zeroY - firstLastPoint.Y);
+                    await resultCanvasContext2D.LineTo(zeroX + currentPoint.X, zeroY - currentPoint.Y);
+                    await resultCanvasContext2D.Stroke();
+
+                    await resultCanvasContext2D.SetStrokeStyle("rgb(0 0 256)");
+                    await resultCanvasContext2D.BeginPath();
+                    await resultCanvasContext2D.MoveTo(zeroX +firstLastPoint.X + 5, zeroY - firstLastPoint.Y);
+                    await resultCanvasContext2D.Arc(zeroX + firstLastPoint.X, zeroY - firstLastPoint.Y, 5, 0, 180 / Math.PI);
+                    await resultCanvasContext2D.Stroke();
+                    await resultCanvasContext2D.BeginPath();
+                    await resultCanvasContext2D.MoveTo(zeroX + secondLastPoint.X + 5, zeroY - secondLastPoint.Y);
+                    await resultCanvasContext2D.Arc(zeroX + secondLastPoint.X, zeroY - secondLastPoint.Y, 5, 0, 180 / Math.PI);
+                    await resultCanvasContext2D.Stroke();
+                    await resultCanvasContext2D.BeginPath();
+                    await resultCanvasContext2D.MoveTo(zeroX + secondLastPoint.X, zeroY - secondLastPoint.Y);
+                    await resultCanvasContext2D.LineTo(zeroX + firstLastPoint.X, zeroY - firstLastPoint.Y);
+                    await resultCanvasContext2D.Stroke();
+                    break;
+                case Step.PushCurrentPoint:
+                    break;
+                default:
+                    break;
+            }
         }
     }
 
