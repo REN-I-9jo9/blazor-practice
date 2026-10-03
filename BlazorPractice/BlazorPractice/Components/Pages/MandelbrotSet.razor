@@ -1,4 +1,5 @@
 ﻿@page "/mandelbrot-set"
+@using System.Drawing
 @using BlazorPractice.Library
 @inject IJSRuntime JS
 
@@ -60,6 +61,26 @@
             canvas = await BlazorCanvas.Get(JS, CanvasID);
             await RefreshCanvas(canvas);
             canvasContext2D = await BlazorCanvasContext2D.Get(JS, CanvasID, "2d");
+
+            await canvasContext2D.MoveTo(0, 0);
+            await canvasContext2D.LineTo(100, 100);
+            await canvasContext2D.Stroke();
+
+            var imagedata = await canvasContext2D.getImageData(0, 0, 100, 100);
+            var data = await imagedata.GetData(JS);
+
+            var random = new Random();
+            for(var i=0;i<data.Length;i++)
+            {
+                data[i] = (byte)random.NextInt64(0, 255);
+            }
+
+            var q = await ImageData.New(JS, data, 100, 100);
+
+            
+            await canvasContext2D.PutImageData(imagedata, 0, 100);
+            await canvasContext2D.PutImageData(q, 0, 200);
+
         }
     }
 

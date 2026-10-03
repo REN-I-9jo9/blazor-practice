@@ -105,11 +105,6 @@
     </Modal>
 }
 <canvas id="@CanvasID" />
-<script>
-    function ReturnSelf(self){
-        return self;
-    }
-</script>
 @code {
     private IconName Status;
 
@@ -144,7 +139,7 @@
 
             var imageData = await blazorCanvasContext2D.getImageData(currentX, currentY, blockSize, blockSize);
             var aa = await imageData.GetPixelFormat();
-            var pixel = await imageData.GetData2(JS);
+            var pixel = await imageData.GetData(JS);
             var r = pixel[0];
             var g = pixel[1];
             var b = pixel[2];

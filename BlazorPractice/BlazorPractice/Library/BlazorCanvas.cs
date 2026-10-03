@@ -112,9 +112,21 @@ namespace BlazorPractice.Library
         public async Task Clip(string fillRule) => await Reference.InvokeVoidAsync("clip", fillRule);
         public async Task Clip(Path2D path, string fillRule) => await Reference.InvokeVoidAsync("clip", path, fillRule);
         public async Task<CanvasGradient> CreateConicGradient(decimal startAngle, decimal x, decimal y) => await CanvasGradient.Create(async () => await Reference.InvokeAsync<IJSObjectReference>("createConicGradient", startAngle, x, y));
-        public async Task<ImageData> CreateImageData(decimal x, decimal y) => await ImageData.Create(async () => await Reference.InvokeAsync<IJSObjectReference>("createImageData", x, y));
-        public async Task<ImageData> CreateImageData(decimal x, decimal y, string colorSpace = null, string pixelFormat = null) => await ImageData.Create(async () => await Reference.InvokeAsync<IJSObjectReference>("createImageData", x, y, new { colorSpace, pixelFormat }));
-        public async Task<ImageData> CreateImageData(ImageData imageData) => await ImageData.Create(async () => await Reference.InvokeAsync<IJSObjectReference>("createImageData", imageData.Reference));
+        public async Task<ImageData> CreateImageData(decimal x, decimal y) => await ImageData.FromCanvas(async () => await Reference.InvokeAsync<IJSObjectReference>("createImageData", x, y));
+        
+        public async Task<ImageData> CreateImageData(decimal x, decimal y, string colorSpace = null, string pixelFormat = null) => await ImageData.FromCanvas(async () =>
+        {
+            if (colorSpace != null && pixelFormat != null)
+                return await Reference.InvokeAsync<IJSObjectReference>("createImageData", x, y, new { colorSpace, pixelFormat });
+            else if (colorSpace == null && pixelFormat != null)
+                return await Reference.InvokeAsync<IJSObjectReference>("createImageData", x, y, new { colorSpace });
+            else if (colorSpace != null && pixelFormat == null)
+                return await Reference.InvokeAsync<IJSObjectReference>("createImageData", x, y, new { pixelFormat });
+            else
+                return await Reference.InvokeAsync<IJSObjectReference>("createImageData", x, y);
+        });
+
+        public async Task<ImageData> CreateImageData(ImageData imageData) => await ImageData.FromCanvas(async () => await Reference.InvokeAsync<IJSObjectReference>("createImageData", imageData.Reference));
         public async Task createLinearGradient() { }
         public async Task createPattern() { }
         public async Task createRadialGradient() { }
@@ -124,12 +136,12 @@ namespace BlazorPractice.Library
         public async Task FillText(string text, int x, int y, int? maxWidth = null)
         {
             if (maxWidth == null)
-                await ImageData.Create(async () => await Reference.InvokeAsync<IJSObjectReference>("fillText", text, x, y));
+                await ImageData.FromCanvas(async () => await Reference.InvokeAsync<IJSObjectReference>("fillText", text, x, y));
             else
-                await ImageData.Create(async () => await Reference.InvokeAsync<IJSObjectReference>("fillText", text, x, y, maxWidth));
+                await ImageData.FromCanvas(async () => await Reference.InvokeAsync<IJSObjectReference>("fillText", text, x, y, maxWidth));
         }
         public async Task getContextAttributes() { }
-        public async Task<ImageData> getImageData(int sx, int sy, int sw, int sh) => await ImageData.Create(async () => await Reference.InvokeAsync<IJSObjectReference>("getImageData", sx, sy, sw, sh));
+        public async Task<ImageData> getImageData(int sx, int sy, int sw, int sh) => await ImageData.FromCanvas(async () => await Reference.InvokeAsync<IJSObjectReference>("getImageData", sx, sy, sw, sh));
         public async Task getLineDash() { }
         public async Task getTransform() { }
         public async Task isContextLost() { }
@@ -152,7 +164,10 @@ namespace BlazorPractice.Library
         public async Task LineTo(int x, int y) => await Reference.InvokeVoidAsync("lineTo", x, y);
 
         public async Task MoveTo(int x, int y) => await Reference.InvokeVoidAsync("moveTo", x, y);
-        public async Task putImageData() { }
+
+        public async Task PutImageData(ImageData imageData, int dx, int dy) => await Reference.InvokeVoidAsync("putImageData", imageData.Reference, dx, dy);
+
+        public async Task PutImageData(ImageData imageData, int dx, int dy, int dirtyX, int dirtyY, int dirtyWidth = 0, int dirtyHeight = 0) => await Reference.InvokeVoidAsync("putImageData", imageData.Reference, dx, dy, dirtyX, dirtyY, dirtyWidth, dirtyHeight);
         public async Task quadraticCurveTo() { }
         public async Task rect() { }
         public async Task resetTransform() { }
@@ -191,26 +206,67 @@ namespace BlazorPractice.Library
 
     public class ImageData
     {
-        public static async Task<ImageData> Create(Func<Task<IJSObjectReference>> getReferenceFunction)
+        public static async Task<ImageData> FromCanvas(Func<Task<IJSObjectReference>> getReferenceFunction)
         {
-            return new ImageData { Reference = await getReferenceFunction() };
+            return new ImageData(await getReferenceFunction());
+        }
+
+        public static async Task<ImageData> New(IJSRuntime runtime, int width, int height, string colorSpace = null, string pixelFormat = null)
+        {
+            if (colorSpace != null && pixelFormat != null)
+                return new ImageData(await runtime.InvokeConstructorAsync("ImageData", width, height, new { colorSpace, pixelFormat }));
+            else if (colorSpace == null && pixelFormat != null)
+                return new ImageData(await runtime.InvokeConstructorAsync("ImageData", width, height, new { pixelFormat }));
+            else if (colorSpace != null && pixelFormat == null)
+                return new ImageData(await runtime.InvokeConstructorAsync("ImageData", width, height, new { colorSpace }));
+            else
+                return new ImageData(await runtime.InvokeConstructorAsync("ImageData", width, height));
+        }
+
+        public static async Task<ImageData> New(IJSRuntime runtime, byte[] dataArray, int width, int height, string colorSpace = null, string pixelFormat = null)
+        {
+            var uint8ClampedArray = await runtime.InvokeConstructorAsync("Uint8ClampedArray", dataArray);
+
+            if (colorSpace != null && pixelFormat != null)
+                return new ImageData(await runtime.InvokeConstructorAsync("ImageData", uint8ClampedArray, width, height, new { colorSpace, pixelFormat }));
+            else if (colorSpace == null && pixelFormat != null)
+                return new ImageData(await runtime.InvokeConstructorAsync("ImageData", uint8ClampedArray, width, height, new { pixelFormat }));
+            else if (colorSpace != null && pixelFormat == null)
+                return new ImageData(await runtime.InvokeConstructorAsync("ImageData", uint8ClampedArray, width, height, new { colorSpace }));
+            else
+                return new ImageData(await runtime.InvokeConstructorAsync("ImageData", uint8ClampedArray, width, height));
+        }
+
+        public static async Task<ImageData> New(IJSRuntime runtime, IJSObjectReference dataArray, int width, int height, string colorSpace = null, string pixelFormat = null)
+        {
+            if (colorSpace != null && pixelFormat != null)
+                return new ImageData(await runtime.InvokeConstructorAsync("ImageData", dataArray, width, height, new { colorSpace, pixelFormat }));
+            else if (colorSpace == null && pixelFormat != null)
+                return new ImageData(await runtime.InvokeConstructorAsync("ImageData", dataArray, width, height, new { pixelFormat }));
+            else if (colorSpace != null && pixelFormat == null)
+                return new ImageData(await runtime.InvokeConstructorAsync("ImageData", dataArray, width, height, new { colorSpace }));
+            else
+                return new ImageData(await runtime.InvokeConstructorAsync("ImageData", dataArray, width, height));
         }
 
         public IJSObjectReference? Reference { get; private set; }
 
-        private ImageData()
+        private ImageData(IJSObjectReference reference)
         {
-
+            Reference = reference;
         }
 
-        public async Task<uint[]> GetData() => await Reference.GetValueAsync<uint[]>("data");
-
-        public async Task<byte[]> GetData2(IJSRuntime runtime)
+        public async Task<byte[]> GetData(IJSRuntime runtime)
         {
             var data = await Reference.GetValueAsync<IJSObjectReference>("data");
             var buffer = await data.GetValueAsync<IJSObjectReference>("buffer");
             var uint8Array = await runtime.InvokeConstructorAsync("Uint8Array", buffer);
-            return await runtime.InvokeAsync<byte[]>("ReturnSelf", uint8Array);
+            return await uint8Array.InvokeAsync<byte[]>("slice");
+        }
+
+        public async Task<IJSObjectReference> GetRawData(IJSRuntime runtime)
+        {
+            return await Reference.GetValueAsync<IJSObjectReference>("data");
         }
 
         public async Task<string> GetColorSpace() => await Reference.GetValueAsync<string>("colorSpace");
