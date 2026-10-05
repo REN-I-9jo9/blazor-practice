@@ -1,5 +1,4 @@
 ﻿@page "/mandelbrot-set"
-@using System.Drawing
 @using BlazorPractice.Library
 @inject IJSRuntime JS
 
@@ -27,7 +26,9 @@
     }
 </style>
 <div class="point-display-table-container">
+    <Preload LoadingText="Loading..." />
     <canvas id="@CanvasID" />
+    <canvas id="@CoordinateCanvasID" />
     <div class="point-display-table">
         <Button Color="ButtonColor.Primary" @onclick="OnShowModalClick">
             <Icon Name="IconName.List" />
@@ -36,14 +37,17 @@
 </div>
 <Modal @ref="modal" Title="Title" OnHidden="OnModalHidden">
     <BodyTemplate>
-        
+        <div>
+            Center X : <NumberInput TValue="double" @bind-Value=" @viewCenterX" Placeholder="X" AllowNegativeNumbers /><br />
+            Center Y : <NumberInput TValue="double" @bind-Value=" @viewCenterY" Placeholder="Y" AllowNegativeNumbers /><br />
+            Scale : <NumberInput TValue="double" @bind-Value=" @viewScale" Placeholder="Scale" Min="0" /><br />
+            Iteration : <NumberInput TValue="int" @bind-Value=" @iterationCount" Placeholder="Iteration" Min="1" Max="256" />
+        </div>
     </BodyTemplate>
-    <FooterTemplate>
-        <Button Color="ButtonColor.None">Button</Button>
-    </FooterTemplate>
 </Modal>
 @code {
-    const string CanvasID = "CoordinateCanvasID";
+    const string CanvasID = "CanvasID";
+    const string CoordinateCanvasID = "CoordinateCanvasID";
     protected override void OnInitialized()
     {
     }
@@ -52,7 +56,21 @@
 
     private BlazorCanvasContext2D canvasContext2D;
 
+    private BlazorCanvas coordinateCanvas;
+
+    private BlazorCanvasContext2D coordinateCanvasContext2D;
+
     private Modal modal;
+
+    private double viewCenterX = 0d;
+
+    private double viewCenterY = 0d;
+
+    private double viewScale = 200d;
+
+    private int iterationCount = 5;
+
+    [Inject] protected PreloadService PreloadService { get; set; } = default!;
 
     protected async override Task OnAfterRenderAsync(bool firstRender)
     {
@@ -62,25 +80,135 @@
             await RefreshCanvas(canvas);
             canvasContext2D = await BlazorCanvasContext2D.Get(JS, CanvasID, "2d");
 
-            await canvasContext2D.MoveTo(0, 0);
-            await canvasContext2D.LineTo(100, 100);
-            await canvasContext2D.Stroke();
+            coordinateCanvas = await BlazorCanvas.Get(JS, CoordinateCanvasID);
+            await RefreshCanvas(coordinateCanvas);
+            coordinateCanvasContext2D = await BlazorCanvasContext2D.Get(JS, CoordinateCanvasID, "2d");
 
-            var imagedata = await canvasContext2D.getImageData(0, 0, 100, 100);
-            var data = await imagedata.GetData(JS);
+            PreloadService.Show(SpinnerColor.Light, "Loading data...");
+            await Task.Run(Redraw);
+            await Task.Run(DrawCoordinate);
+            PreloadService.Hide();
+        }
+    }
 
-            var random = new Random();
-            for(var i=0;i<data.Length;i++)
+    private async Task Redraw()
+    {
+        var canvasWidth = (int)await canvas.GetOffsetWidth();
+        var cancasHeight = (int)await canvas.GetOffsetHeight();
+        var canvasCenterX = canvasWidth / 2;
+        var canvasCenterY = cancasHeight / 2;
+
+        var data = new byte[4 * canvasWidth * cancasHeight];
+
+        for (var i = 0; i < canvasWidth; i++)
+        {
+            for (var j = 0; j < cancasHeight; j++)
             {
-                data[i] = (byte)random.NextInt64(0, 255);
+                GetColor((i - canvasCenterX) / viewScale + viewCenterX, (j - canvasCenterY) / viewScale - viewCenterY, out var R, out var G, out var B, out var A);
+                data[4 * (j * canvasWidth + i)] = R;
+                data[4 * (j * canvasWidth + i) + 1] = G;
+                data[4 * (j * canvasWidth + i) + 2] = B;
+                data[4 * (j * canvasWidth + i) + 3] = A;
             }
+        }
 
-            var q = await ImageData.New(JS, data, 100, 100);
+        var imageData = await ImageData.New(JS, data, canvasWidth, cancasHeight);
 
-            
-            await canvasContext2D.PutImageData(imagedata, 0, 100);
-            await canvasContext2D.PutImageData(q, 0, 200);
+        await RefreshCanvas(canvas);
+        await canvasContext2D.PutImageData(imageData, 0, 0);
+    }
 
+    private void GetColor(double X, double Y, out byte R, out byte G, out byte B, out byte A)
+    {
+        var currentZ = new ComplexNumber { Real = 0, Imaginary = 0 };
+        var c = new ComplexNumber { Real = X, Imaginary = Y };
+        var finalDistance = 0d;
+        for (var i = 0; i < iterationCount; i++)
+        {
+            currentZ = MandelbrotCaculate(currentZ, c);
+            finalDistance = Math.Pow(Math.Pow(currentZ.Real, 2) + Math.Pow(currentZ.Imaginary, 2), 1d / 2);
+            if (finalDistance > 2)
+            {
+                R = 0;
+                G = 0;
+                B = 0;
+                A = (byte)(255 / (double)iterationCount * i);
+                return;
+            }
+        }
+        R = 0;
+        G = 0;
+        B = 0;
+        A = (byte)(255d - (255d * (finalDistance / 2d)));
+    }
+
+    private class ComplexNumber
+    {
+        public double Real;
+        public double Imaginary;
+
+        public static ComplexNumber operator +(ComplexNumber operand1, ComplexNumber operand2)
+        {
+            return new ComplexNumber
+            {
+                Real = operand1.Real + operand2.Real,
+                Imaginary = operand1.Imaginary + operand2.Imaginary
+            };
+        }
+
+        public static ComplexNumber operator -(ComplexNumber operand1, ComplexNumber operand2)
+        {
+            return new ComplexNumber
+            {
+                Real = operand1.Real - operand2.Real,
+                Imaginary = operand1.Imaginary - operand2.Imaginary
+            };
+        }
+
+        public static ComplexNumber operator *(ComplexNumber operand1, ComplexNumber operand2)
+        {
+            return new ComplexNumber
+            {
+                Real = operand1.Real * operand2.Real - operand1.Imaginary * operand2.Imaginary,
+                Imaginary = operand1.Real * operand2.Imaginary + operand1.Imaginary * operand2.Real
+            };
+        }
+    }
+
+    private ComplexNumber MandelbrotCaculate(ComplexNumber previousZ, ComplexNumber C) => previousZ * previousZ + C;
+
+    private async Task DrawCoordinate()
+    {
+        await RefreshCanvas(coordinateCanvas);
+
+        var canvasWidth = (int)await coordinateCanvas.GetOffsetWidth();
+        var canvasHeight = (int)await coordinateCanvas.GetOffsetHeight();
+
+        var zeroX = canvasWidth / 2 - (int)(viewCenterX * viewScale);
+        var zeroY = canvasHeight / 2 + (int)(viewCenterY * viewScale);
+
+        await coordinateCanvasContext2D.SetFillStyle("red");
+        await coordinateCanvasContext2D.FillText($"{0}", zeroX + 2, zeroY - 2);
+
+        await coordinateCanvasContext2D.FillRect(-1, zeroY, canvasWidth + 1, 1);
+
+        for (int i = 100; i < zeroX; i += 100)
+        {
+            await coordinateCanvasContext2D.FillRect(zeroX + i, zeroY - 5, 1, 10);
+            await coordinateCanvasContext2D.FillText($"{i / viewScale}", zeroX + i + 2, zeroY - 2);
+
+            await coordinateCanvasContext2D.FillRect(zeroX - i, zeroY - 5, 1, 10);
+            await coordinateCanvasContext2D.FillText($"{-i / viewScale}", zeroX - i + 2, zeroY - 2);
+        }
+
+        await coordinateCanvasContext2D.FillRect(zeroX, -1, 1, canvasWidth + 1);
+        for (int i = 100; i < zeroY; i += 100)
+        {
+            await coordinateCanvasContext2D.FillRect(zeroX - 5, zeroY + i, 10, 1);
+            await coordinateCanvasContext2D.FillText($"{-i / viewScale}", zeroX + 2, zeroY + i - 2);
+
+            await coordinateCanvasContext2D.FillRect(zeroX - 5, zeroY - i, 10, 1);
+            await coordinateCanvasContext2D.FillText($"{i / viewScale}", zeroX + 2, zeroY - i - 2);
         }
     }
 
@@ -97,6 +225,9 @@
 
     private async Task OnModalHidden()
     {
-        
+        PreloadService.Show(SpinnerColor.Light, "Loading data...");
+        await Task.Run(Redraw);
+        await Task.Run(DrawCoordinate);
+        PreloadService.Hide();
     }
 }

@@ -237,18 +237,6 @@ namespace BlazorPractice.Library
                 return new ImageData(await runtime.InvokeConstructorAsync("ImageData", uint8ClampedArray, width, height));
         }
 
-        public static async Task<ImageData> New(IJSRuntime runtime, IJSObjectReference dataArray, int width, int height, string colorSpace = null, string pixelFormat = null)
-        {
-            if (colorSpace != null && pixelFormat != null)
-                return new ImageData(await runtime.InvokeConstructorAsync("ImageData", dataArray, width, height, new { colorSpace, pixelFormat }));
-            else if (colorSpace == null && pixelFormat != null)
-                return new ImageData(await runtime.InvokeConstructorAsync("ImageData", dataArray, width, height, new { pixelFormat }));
-            else if (colorSpace != null && pixelFormat == null)
-                return new ImageData(await runtime.InvokeConstructorAsync("ImageData", dataArray, width, height, new { colorSpace }));
-            else
-                return new ImageData(await runtime.InvokeConstructorAsync("ImageData", dataArray, width, height));
-        }
-
         public IJSObjectReference? Reference { get; private set; }
 
         private ImageData(IJSObjectReference reference)
@@ -262,11 +250,6 @@ namespace BlazorPractice.Library
             var buffer = await data.GetValueAsync<IJSObjectReference>("buffer");
             var uint8Array = await runtime.InvokeConstructorAsync("Uint8Array", buffer);
             return await uint8Array.InvokeAsync<byte[]>("slice");
-        }
-
-        public async Task<IJSObjectReference> GetRawData(IJSRuntime runtime)
-        {
-            return await Reference.GetValueAsync<IJSObjectReference>("data");
         }
 
         public async Task<string> GetColorSpace() => await Reference.GetValueAsync<string>("colorSpace");
