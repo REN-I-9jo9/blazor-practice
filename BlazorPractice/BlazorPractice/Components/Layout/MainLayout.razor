@@ -1,0 +1,60 @@
+﻿@inherits LayoutComponentBase
+
+<style>
+    @@layer {
+        article {
+            padding: 0px !important;
+        }
+    }
+
+    main {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
+
+    article {
+        flex-grow: 1;
+        display: flex;
+    }
+</style>
+
+<BlazorBootstrapLayout StickyHeader="true">
+    <HeaderSection>
+        <ThemeSwitcher Class="ps-3 ps-lg-2" Position="DropdownMenuPosition.End" />
+    </HeaderSection>
+
+    <SidebarSection>
+        <Sidebar2 Href="/" DataProvider="Sidebar2DataProvider" />
+    </SidebarSection>
+
+    <ContentSection>
+        @Body
+    </ContentSection>
+</BlazorBootstrapLayout>
+
+@code {
+    private IEnumerable<NavItem> navItems = default!;
+
+    private async Task<Sidebar2DataProviderResult> Sidebar2DataProvider(Sidebar2DataProviderRequest request)
+    {
+        if (navItems is null)
+            navItems = GetNavItems();
+
+        return await Task.FromResult(request.ApplyTo(navItems));
+    }
+
+    private IEnumerable<NavItem> GetNavItems()
+    {
+        navItems = new List<NavItem>
+                   {
+                       new NavItem { Id = "1", Href = "/", IconName = IconName.HouseDoorFill, Text = "Home", Match=NavLinkMatch.All},
+                       new NavItem { Id = "2", Href = "/langtons-ant", Text = "Langton's Ant"},
+                       new NavItem { Id = "3", Href = "/convex-hull-problem", Text = "Convex Hull Problem"},
+                       new NavItem { Id = "4", Href = "/mandelbrot-set", Text = "Mandelbrot Set"},
+                       new NavItem { Id = "5", Href = "/maze-geneation", Text = "Maze Geneation"}
+                   };
+
+        return navItems;
+    }
+}

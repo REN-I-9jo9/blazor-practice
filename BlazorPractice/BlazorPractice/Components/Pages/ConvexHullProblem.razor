@@ -1,0 +1,720 @@
+﻿@page "/convex-hull-problem"
+@using System.Diagnostics
+@using System.Timers;
+@using BlazorPractice.Library
+@inject IJSRuntime JS
+
+<PageTitle>Blazor Practice - Convex Hull Problem</PageTitle>
+
+<style>
+    canvas {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+    }
+
+    .point-display-table-container {
+        position: relative;
+        width: 100%;
+        height: 100%;
+    }
+
+    .point-display-table {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        display: flex;
+        gap: 10px;
+    }
+</style>
+<div class="point-display-table-container">
+    <canvas id="@CoordinateCanvasID" />
+    <canvas id="@ResultCanvasID" />
+    <canvas id="@PointCanvasID" />
+    <div class="point-display-table">
+        <Button Color="ButtonColor.Primary" @onclick="OnShowModalClick">
+            <Icon Name="IconName.List" />
+        </Button>
+        @if (Status == IconName.Stop || Status == IconName.Pause)
+        {
+            <Button Color="ButtonColor.Primary" @onclick="OnPlayClick">
+                Andrew's monotone chain
+            </Button>
+        }
+        @if (Status == IconName.Play)
+        {
+            <Button Color="ButtonColor.Primary" @onclick="OnPauseClick">
+                <Icon Name="IconName.Pause" />
+            </Button>
+        }
+
+        @if (Status == IconName.Pause || Status == IconName.Play)
+        {
+            <Button Color="ButtonColor.Primary" @onclick="OnStopClick">
+                <Icon Name="IconName.Stop" />
+            </Button>
+        }
+    </div>
+</div>
+@if (Status == IconName.Stop)
+{
+    <Modal @ref="modal" Title="Points" OnHidden="OnModalHidden">
+        <BodyTemplate>
+            <Grid @ref="grid" TItem="Point" Class="table table-hover table-bordered table-striped" DataProvider="EmployeesDataProvider" Responsive="true">
+                <GridColumns>
+                    <GridColumn TItem="Point" HeaderText="X">
+                        <NumberInput TValue="int" @bind-Value=" @context.X" Placeholder="Enter amount" />
+                    </GridColumn>
+                    <GridColumn TItem="Point" HeaderText="Y">
+                        <NumberInput TValue="int" @bind-Value=" @context.Y" Placeholder="Enter amount" />
+                    </GridColumn>
+                    <GridColumn TItem="Point">
+                        <Button Color="ButtonColor.Danger" @onclick="(e => DeleteItem(context))" Disabled="@(PointList.Count <= 3)"><Icon Name="IconName.Trash" /></Button>
+                    </GridColumn>
+                </GridColumns>
+            </Grid>
+        </BodyTemplate>
+        <FooterTemplate>
+            <Button Color="ButtonColor.None" @onclick="AddNewItem">Add New</Button>
+            <Button Color="ButtonColor.None" @onclick="RandomlizeAll">Randomlize All</Button>
+        </FooterTemplate>
+    </Modal>
+}
+@if (Status != IconName.Stop)
+{
+    <Modal @ref="modal" Title="Points">
+        <BodyTemplate>
+            <Grid @ref="grid" TItem="Point" Class="table table-hover table-bordered table-striped" DataProvider="EmployeesDataProvider" Responsive="true">
+                <GridColumns>
+                    <GridColumn TItem="Point" HeaderText="X">
+                        @context.X
+                    </GridColumn>
+                    <GridColumn TItem="Point" HeaderText="Y">
+                        @context.Y
+                    </GridColumn>
+                </GridColumns>
+            </Grid>
+        </BodyTemplate>
+    </Modal>
+}
+@code {
+
+    private Grid<Point> grid;
+
+    [DebuggerDisplay("({X}, {Y})")]
+    private class Point
+    {
+        public int X;
+        public int Y;
+    }
+    const string CoordinateCanvasID = "CoordinateCanvasID";
+    const string PointCanvasID = "PointCanvasID";
+    const string ResultCanvasID = "ResultCanvasID";
+    private List<Point> PointList;
+    private IconName Status;
+    protected override void OnInitialized()
+    {
+        PointList = Enumerable.Range(0, 15).Select(_ => new Point()).ToList();
+
+        Status = IconName.Stop;
+        timer.Interval = 100;
+        stepObject = null;
+        timer.Elapsed += async (object? source, ElapsedEventArgs e) =>
+        {
+            stepObject = RunStep(stepObject);
+            await DrawResult(stepObject);
+            if (stepObject?.step == Step.Done)
+            {
+                timer.Stop();
+                await InvokeAsync(() =>
+                {
+                    Status = IconName.Stop;
+                    StateHasChanged();
+                });
+            }
+        };
+    }
+
+    private StepObject stepObject = null;
+
+    private StepObject RunStep(StepObject stepObject = null)
+    {
+        if (stepObject == null)
+        {
+            return new StepObject
+            {
+                previousStep = null,
+                step = Step.UpperGetCurrentPoint,
+                upperStack = new Stack<Point>(),
+                lowerStack = new Stack<Point>(),
+                Index = 0
+            };
+        }
+
+        switch (stepObject.step)
+        {
+            case Step.UpperGetCurrentPoint:
+                {
+                    var point = PointList[stepObject.Index];
+                    if (stepObject.upperStack.Count >= 2)
+                        return new StepObject
+                        {
+                            previousStep = Step.UpperGetCurrentPoint,
+                            step = Step.UpperGetPrevious2point,
+                            upperStack = stepObject.upperStack,
+                            lowerStack = stepObject.lowerStack,
+                            Index = stepObject.Index,
+                            currentPoint = point
+                        };
+                    else
+                        return new StepObject
+                        {
+                            previousStep = Step.UpperGetCurrentPoint,
+                            step = Step.UpperPushCurrentPoint,
+                            upperStack = stepObject.upperStack,
+                            lowerStack = stepObject.lowerStack,
+                            Index = stepObject.Index,
+                            currentPoint = point
+                        };
+                }
+            case Step.UpperGetPrevious2point:
+                {
+                    var firstLastPoint = stepObject.upperStack.Pop();
+                    var secondLastPoint = stepObject.upperStack.Peek();
+                    return new StepObject
+                    {
+                        previousStep = Step.UpperGetPrevious2point,
+                        step = Step.UpperGetAngle,
+                        upperStack = stepObject.upperStack,
+                        lowerStack = stepObject.lowerStack,
+                        Index = stepObject.Index,
+                        currentPoint = stepObject.currentPoint,
+                        firstLastPoint = firstLastPoint,
+                        secondLastPoint = secondLastPoint
+                    };
+                }
+            case Step.UpperGetAngle:
+                {
+                    if (Counterwise(stepObject.secondLastPoint, stepObject.firstLastPoint, stepObject.currentPoint, out _))
+                    {
+                        stepObject.upperStack.Push(stepObject.firstLastPoint);
+                        return new StepObject
+                        {
+                            previousStep = Step.UpperGetAngle,
+                            step = Step.UpperPushCurrentPoint,
+                            upperStack = stepObject.upperStack,
+                            lowerStack = stepObject.lowerStack,
+                            Index = stepObject.Index,
+                            currentPoint = stepObject.currentPoint,
+                            firstLastPoint = stepObject.firstLastPoint,
+                            secondLastPoint = stepObject.secondLastPoint
+                        };
+                    }
+                    else
+                    {
+                        if (stepObject.upperStack.Count >= 2)
+                            return new StepObject
+                            {
+                                previousStep = Step.UpperGetAngle,
+                                step = Step.UpperGetPrevious2point,
+                                upperStack = stepObject.upperStack,
+                                lowerStack = stepObject.lowerStack,
+                                Index = stepObject.Index,
+                                currentPoint = stepObject.currentPoint,
+                                firstLastPoint = stepObject.firstLastPoint,
+                                secondLastPoint = stepObject.secondLastPoint
+                            };
+                        else
+                            return new StepObject
+                            {
+                                previousStep = Step.UpperGetAngle,
+                                step = Step.UpperPushCurrentPoint,
+                                upperStack = stepObject.upperStack,
+                                lowerStack = stepObject.lowerStack,
+                                Index = stepObject.Index,
+                                currentPoint = stepObject.currentPoint,
+                                firstLastPoint = stepObject.firstLastPoint,
+                                secondLastPoint = stepObject.secondLastPoint
+                            };
+                    }
+                }
+            case Step.UpperPushCurrentPoint:
+                {
+                    stepObject.upperStack.Push(stepObject.currentPoint);
+                    var newIndex = stepObject.Index + 1;
+                    if (newIndex >= PointList.Count)
+                        return new StepObject
+                        {
+                            previousStep = Step.UpperPushCurrentPoint,
+                            step = Step.LowerGetCurrentPoint,
+                            upperStack = stepObject.upperStack,
+                            lowerStack = stepObject.lowerStack,
+                            Index = stepObject.Index,
+                            currentPoint = stepObject.currentPoint,
+                        };
+                    else
+                        return new StepObject
+                        {
+                            previousStep = Step.UpperPushCurrentPoint,
+                            step = Step.UpperGetCurrentPoint,
+                            upperStack = stepObject.upperStack,
+                            lowerStack = stepObject.lowerStack,
+                            Index = newIndex,
+                            currentPoint = stepObject.currentPoint,
+                        };
+                }
+            case Step.LowerGetCurrentPoint:
+                {
+                    var point = PointList[stepObject.Index];
+                    if (stepObject.lowerStack.Count >= 2)
+                        return new StepObject
+                        {
+                            previousStep = Step.LowerGetCurrentPoint,
+                            step = Step.LowerGetPrevious2point,
+                            upperStack = stepObject.upperStack,
+                            lowerStack = stepObject.lowerStack,
+                            Index = stepObject.Index,
+                            currentPoint = point
+                        };
+                    else
+                        return new StepObject
+                        {
+                            previousStep = Step.LowerGetCurrentPoint,
+                            step = Step.LowerPushCurrentPoint,
+                            upperStack = stepObject.upperStack,
+                            lowerStack = stepObject.lowerStack,
+                            Index = stepObject.Index,
+                            currentPoint = point
+                        };
+                }
+            case Step.LowerGetPrevious2point:
+                {
+                    var firstLastPoint = stepObject.lowerStack.Pop();
+                    var secondLastPoint = stepObject.lowerStack.Peek();
+                    return new StepObject
+                    {
+                        previousStep = Step.LowerGetPrevious2point,
+                        step = Step.LowerGetAngle,
+                        upperStack = stepObject.upperStack,
+                        lowerStack = stepObject.lowerStack,
+                        Index = stepObject.Index,
+                        currentPoint = stepObject.currentPoint,
+                        firstLastPoint = firstLastPoint,
+                        secondLastPoint = secondLastPoint
+                    };
+                }
+            case Step.LowerGetAngle:
+                {
+                    if (Counterwise(stepObject.secondLastPoint, stepObject.firstLastPoint, stepObject.currentPoint, out _))
+                    {
+                        stepObject.lowerStack.Push(stepObject.firstLastPoint);
+                        return new StepObject
+                        {
+                            previousStep = Step.LowerGetAngle,
+                            step = Step.LowerPushCurrentPoint,
+                            upperStack = stepObject.upperStack,
+                            lowerStack = stepObject.lowerStack,
+                            Index = stepObject.Index,
+                            currentPoint = stepObject.currentPoint,
+                            firstLastPoint = stepObject.firstLastPoint,
+                            secondLastPoint = stepObject.secondLastPoint
+                        };
+                    }
+                    else
+                    {
+                        if (stepObject.lowerStack.Count >= 2)
+                            return new StepObject
+                            {
+                                previousStep = Step.LowerGetAngle,
+                                step = Step.LowerGetPrevious2point,
+                                upperStack = stepObject.upperStack,
+                                lowerStack = stepObject.lowerStack,
+                                Index = stepObject.Index,
+                                currentPoint = stepObject.currentPoint,
+                                firstLastPoint = stepObject.firstLastPoint,
+                                secondLastPoint = stepObject.secondLastPoint
+                            };
+                        else
+                            return new StepObject
+                            {
+                                previousStep = Step.LowerGetAngle,
+                                step = Step.LowerPushCurrentPoint,
+                                upperStack = stepObject.upperStack,
+                                lowerStack = stepObject.lowerStack,
+                                Index = stepObject.Index,
+                                currentPoint = stepObject.currentPoint,
+                                firstLastPoint = stepObject.firstLastPoint,
+                                secondLastPoint = stepObject.secondLastPoint
+                            };
+                    }
+                }
+            case Step.LowerPushCurrentPoint:
+                {
+                    stepObject.lowerStack.Push(stepObject.currentPoint);
+                    var newIndex = stepObject.Index - 1;
+                    if (newIndex < 0)
+                        return new StepObject
+                        {
+                            previousStep = Step.LowerPushCurrentPoint,
+                            step = Step.Done,
+                            upperStack = stepObject.upperStack,
+                            lowerStack = stepObject.lowerStack,
+                            Index = stepObject.Index,
+                            currentPoint = stepObject.currentPoint,
+                        };
+                    else
+                        return new StepObject
+                        {
+                            previousStep = Step.LowerPushCurrentPoint,
+                            step = Step.LowerGetCurrentPoint,
+                            upperStack = stepObject.upperStack,
+                            lowerStack = stepObject.lowerStack,
+                            Index = newIndex,
+                            currentPoint = stepObject.currentPoint,
+                        };
+                }
+            default:
+                return new StepObject
+                {
+                    previousStep = stepObject.step,
+                    step = stepObject.step,
+                    upperStack = stepObject.upperStack,
+                    lowerStack = stepObject.lowerStack,
+                    Index = stepObject.Index,
+                    currentPoint = stepObject.currentPoint,
+                    firstLastPoint = stepObject.firstLastPoint,
+                    secondLastPoint = stepObject.secondLastPoint
+                };
+        }
+    }
+
+    public enum Step
+    {
+        UpperGetCurrentPoint,
+        UpperGetPrevious2point,
+        UpperGetAngle,
+        UpperPushCurrentPoint,
+        LowerGetCurrentPoint,
+        LowerGetPrevious2point,
+        LowerGetAngle,
+        LowerPushCurrentPoint,
+        Done
+    }
+
+    private class StepObject
+    {
+        public Step? previousStep;
+        public Step step;
+        public Stack<Point> upperStack;
+        public Stack<Point> lowerStack;
+        public int Index;
+        public Point currentPoint;
+        public Point firstLastPoint;
+        public Point secondLastPoint;
+    }
+
+    private async Task OnPlayClick()
+    {
+        if (Status == IconName.Stop)
+        {
+
+        }
+
+        timer.Start();
+        Status = IconName.Play;
+    }
+
+    private bool Counterwise(Point point, Point point2, Point point3, out double angle)
+    {
+        var vector1 = new Point { X = point2.X - point.X, Y = point2.Y - point.Y };
+        var vector2 = new Point { X = point3.X - point2.X, Y = point3.Y - point2.Y };
+        angle = CaculateAngle(vector1, vector2);
+
+        return angle < 0;
+    }
+
+    private double CaculateAngle(Point vector1, Point vector2)
+    {
+        var dotProduct = vector1.X * vector2.X + vector1.Y * vector2.Y;
+        var determinant = vector1.X * vector2.Y - vector1.Y * vector2.X;
+        return Math.Atan2(determinant, dotProduct);
+    }
+
+    private async Task DrawResult(StepObject stepObject)
+    {
+        var canvasWidth = (int)await coordinateCanvas.GetOffsetWidth();
+        var canvasHeight = (int)await coordinateCanvas.GetOffsetHeight();
+        var zeroX = canvasWidth / 2;
+        var zeroY = canvasHeight / 2;
+
+        await RefreshCanvas(resultCanvas);
+        await resultCanvasContext2D.SetStrokeStyle("rgb(0 0 0)");
+
+        var result = stepObject.upperStack.ToList();
+        result.Reverse();
+        for (var i = 0; i < result.Count - 1; i++)
+        {
+            var point1 = result[i];
+            var point2 = result[i + 1];
+            await resultCanvasContext2D.BeginPath();
+            await resultCanvasContext2D.MoveTo(zeroX + point1.X, zeroY - point1.Y);
+            await resultCanvasContext2D.LineTo(zeroX + point2.X, zeroY - point2.Y);
+            await resultCanvasContext2D.Stroke();
+        }
+
+        result = stepObject.lowerStack.ToList();
+        result.Reverse();
+        for (var i = 0; i < result.Count - 1; i++)
+        {
+            var point1 = result[i];
+            var point2 = result[i + 1];
+            await resultCanvasContext2D.BeginPath();
+            await resultCanvasContext2D.MoveTo(zeroX + point1.X, zeroY - point1.Y);
+            await resultCanvasContext2D.LineTo(zeroX + point2.X, zeroY - point2.Y);
+            await resultCanvasContext2D.Stroke();
+        }
+
+        var currentPoint = stepObject.currentPoint;
+        var firstLastPoint = stepObject.firstLastPoint;
+        var secondLastPoint = stepObject.secondLastPoint;
+
+        if (currentPoint != null)
+        {
+            await resultCanvasContext2D.SetStrokeStyle("rgb(0 0 256)");
+            await resultCanvasContext2D.BeginPath();
+            await resultCanvasContext2D.MoveTo(zeroX + currentPoint.X+5, zeroY - currentPoint.Y );
+            await resultCanvasContext2D.Arc(zeroX + currentPoint.X, zeroY - currentPoint.Y, 5, 0, 180 / Math.PI);
+            await resultCanvasContext2D.Stroke();
+            switch (stepObject.previousStep)
+            {
+                case Step.UpperGetCurrentPoint:
+                case Step.LowerGetCurrentPoint:
+                    break;
+                case Step.UpperGetPrevious2point:
+                case Step.LowerGetPrevious2point:
+                    await resultCanvasContext2D.SetStrokeStyle("rgb(0 0 256)");
+                    await resultCanvasContext2D.BeginPath();
+                    await resultCanvasContext2D.MoveTo(zeroX + firstLastPoint.X + 5, zeroY - firstLastPoint.Y);
+                    await resultCanvasContext2D.Arc(zeroX + firstLastPoint.X, zeroY - firstLastPoint.Y, 5, 0, 180 / Math.PI);
+                    await resultCanvasContext2D.Stroke();
+                    await resultCanvasContext2D.BeginPath();
+                    await resultCanvasContext2D.MoveTo(zeroX + secondLastPoint.X + 5, zeroY - secondLastPoint.Y);
+                    await resultCanvasContext2D.Arc(zeroX + secondLastPoint.X, zeroY - secondLastPoint.Y, 5, 0, 180 / Math.PI);
+                    await resultCanvasContext2D.Stroke();
+                    await resultCanvasContext2D.BeginPath();
+                    await resultCanvasContext2D.MoveTo(zeroX + secondLastPoint.X, zeroY - secondLastPoint.Y);
+                    await resultCanvasContext2D.LineTo(zeroX + firstLastPoint.X, zeroY - firstLastPoint.Y);
+                    await resultCanvasContext2D.Stroke();
+                    break;
+                case Step.UpperGetAngle:
+                case Step.LowerGetAngle:
+                    var isCounterWise = Counterwise(secondLastPoint, firstLastPoint, currentPoint, out _);
+                    var vector1 = new Point { X = firstLastPoint.X - secondLastPoint.X, Y = firstLastPoint.Y - secondLastPoint.Y };
+                    var angle1 = CaculateAngle(vector1, new Point { X = 1, Y = 0 });
+                    var vector2 = new Point { X = currentPoint.X - firstLastPoint.X, Y = currentPoint.Y - firstLastPoint.Y };
+                    var angle2 = CaculateAngle(vector2, new Point { X = 1, Y = 0 });
+                    if (isCounterWise)
+                        await resultCanvasContext2D.SetStrokeStyle("rgb(0 256 0)");
+                    else
+                        await resultCanvasContext2D.SetStrokeStyle("rgb(256 0 0)");
+                    await resultCanvasContext2D.BeginPath();
+                    await resultCanvasContext2D.MoveTo(zeroX + firstLastPoint.X, zeroY - firstLastPoint.Y);
+                    await resultCanvasContext2D.Arc(zeroX + firstLastPoint.X, zeroY - firstLastPoint.Y, 20, angle1, angle2, !isCounterWise);
+                    await resultCanvasContext2D.Stroke();
+
+                    await resultCanvasContext2D.BeginPath();
+                    await resultCanvasContext2D.MoveTo(zeroX + firstLastPoint.X, zeroY - firstLastPoint.Y);
+                    await resultCanvasContext2D.LineTo(zeroX + currentPoint.X, zeroY - currentPoint.Y);
+                    await resultCanvasContext2D.Stroke();
+
+                    await resultCanvasContext2D.SetStrokeStyle("rgb(0 0 256)");
+                    await resultCanvasContext2D.BeginPath();
+                    await resultCanvasContext2D.MoveTo(zeroX +firstLastPoint.X + 5, zeroY - firstLastPoint.Y);
+                    await resultCanvasContext2D.Arc(zeroX + firstLastPoint.X, zeroY - firstLastPoint.Y, 5, 0, 180 / Math.PI);
+                    await resultCanvasContext2D.Stroke();
+                    await resultCanvasContext2D.BeginPath();
+                    await resultCanvasContext2D.MoveTo(zeroX + secondLastPoint.X + 5, zeroY - secondLastPoint.Y);
+                    await resultCanvasContext2D.Arc(zeroX + secondLastPoint.X, zeroY - secondLastPoint.Y, 5, 0, 180 / Math.PI);
+                    await resultCanvasContext2D.Stroke();
+                    await resultCanvasContext2D.BeginPath();
+                    await resultCanvasContext2D.MoveTo(zeroX + secondLastPoint.X, zeroY - secondLastPoint.Y);
+                    await resultCanvasContext2D.LineTo(zeroX + firstLastPoint.X, zeroY - firstLastPoint.Y);
+                    await resultCanvasContext2D.Stroke();
+                    break;
+                case Step.UpperPushCurrentPoint:
+                case Step.LowerPushCurrentPoint:
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+
+    private async Task<GridDataProviderResult<Point>> EmployeesDataProvider(GridDataProviderRequest<Point> request)
+    {
+        return await Task.FromResult(request.ApplyTo(PointList));
+    }
+
+    private BlazorCanvas coordinateCanvas;
+
+    private BlazorCanvasContext2D coordinateCanvasContext2D;
+
+    private BlazorCanvas pointCanvas;
+
+    private BlazorCanvasContext2D pointCanvasContext2D;
+
+    private BlazorCanvas resultCanvas;
+
+    private BlazorCanvasContext2D resultCanvasContext2D;
+
+    protected async override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            coordinateCanvas = await BlazorCanvas.Get(JS, CoordinateCanvasID);
+            await RefreshCanvas(coordinateCanvas);
+            coordinateCanvasContext2D = await BlazorCanvasContext2D.Get(JS, CoordinateCanvasID, "2d");
+            await DrawPlane();
+
+            pointCanvas = await BlazorCanvas.Get(JS, PointCanvasID);
+            await RefreshCanvas(pointCanvas);
+            pointCanvasContext2D = await BlazorCanvasContext2D.Get(JS, PointCanvasID, "2d");
+            await DrawPoint();
+
+            resultCanvas = await BlazorCanvas.Get(JS, ResultCanvasID);
+            await RefreshCanvas(resultCanvas);
+            resultCanvasContext2D = await BlazorCanvasContext2D.Get(JS, ResultCanvasID, "2d");
+        }
+    }
+
+    private async Task RefreshCanvas(BlazorCanvas canvas)
+    {
+        await canvas.SetWidth(await canvas.GetOffsetWidth());
+        await canvas.SetHeight(await canvas.GetOffsetHeight());
+    }
+
+    private async Task DrawPlane()
+    {
+        var canvasWidth = (int)await coordinateCanvas.GetOffsetWidth();
+        var canvasHeight = (int)await coordinateCanvas.GetOffsetHeight();
+
+        var zeroX = canvasWidth / 2;
+        var zeroY = canvasHeight / 2;
+
+        await coordinateCanvasContext2D.FillText($"{0}", zeroX + 2, zeroY - 2);
+
+        await coordinateCanvasContext2D.MoveTo(-1, zeroY);
+        await coordinateCanvasContext2D.LineTo(canvasWidth + 1, zeroY);
+        await coordinateCanvasContext2D.Stroke();
+
+        for (int i = 100; i < zeroX; i += 100)
+        {
+            await coordinateCanvasContext2D.MoveTo(zeroX + i, zeroY - 5);
+            await coordinateCanvasContext2D.LineTo(zeroX + i, zeroY + 5);
+            await coordinateCanvasContext2D.Stroke();
+
+            await coordinateCanvasContext2D.FillText($"{i}", zeroX + i + 2, zeroY - 2);
+
+            await coordinateCanvasContext2D.MoveTo(zeroX - i, zeroY - 5);
+            await coordinateCanvasContext2D.LineTo(zeroX - i, zeroY + 5);
+            await coordinateCanvasContext2D.Stroke();
+
+            await coordinateCanvasContext2D.FillText($"{-i}", zeroX - i + 2, zeroY - 2);
+        }
+
+        await coordinateCanvasContext2D.MoveTo(zeroX, -1);
+        await coordinateCanvasContext2D.LineTo(zeroX, canvasHeight + 1);
+        await coordinateCanvasContext2D.Stroke();
+
+        for (int i = 100; i < zeroY; i += 100)
+        {
+            await coordinateCanvasContext2D.MoveTo(zeroX - 5, zeroY + i);
+            await coordinateCanvasContext2D.LineTo(zeroX + 5, zeroY + i);
+            await coordinateCanvasContext2D.Stroke();
+
+            await coordinateCanvasContext2D.FillText($"{-i}", zeroX + 2, zeroY + i - 2);
+
+            await coordinateCanvasContext2D.MoveTo(zeroX - 5, zeroY - i);
+            await coordinateCanvasContext2D.LineTo(zeroX + 5, zeroY - i);
+            await coordinateCanvasContext2D.Stroke();
+
+            await coordinateCanvasContext2D.FillText($"{i}", zeroX + 2, zeroY - i - 2);
+        }
+    }
+
+    private async Task DrawPoint()
+    {
+        var canvasWidth = (int)await pointCanvas.GetOffsetWidth();
+        var canvasHeight = (int)await pointCanvas.GetOffsetHeight();
+
+        var zeroX = canvasWidth / 2;
+        var zeroY = canvasHeight / 2;
+        var pointSize = 1;
+        var textOffest = 5;
+
+        foreach (var point in PointList)
+        {
+            await pointCanvasContext2D.MoveTo(zeroX + point.X + pointSize, zeroY - point.Y);
+            await pointCanvasContext2D.Arc(zeroX + point.X, zeroY - point.Y, pointSize, 0, 2 * Math.PI);
+            await pointCanvasContext2D.Stroke();
+
+            await pointCanvasContext2D.FillText($"({point.X}, {point.Y})", zeroX + point.X + textOffest, zeroY - point.Y - textOffest);
+        }
+    }
+
+    private async Task OnModalHidden()
+    {
+        PointList = PointList.OrderBy(point => point.X).ThenBy(point => point.Y).ToList();
+        await grid.RefreshDataAsync();
+        await RefreshCanvas(pointCanvas);
+        await DrawPoint();
+    }
+
+    private Modal modal;
+
+    private async Task OnShowModalClick()
+    {
+        await modal?.ShowAsync();
+    }
+
+    private async Task AddNewItem()
+    {
+        PointList.Add(new Point { });
+        await grid.RefreshDataAsync();
+    }
+
+    private async Task DeleteItem(Point item)
+    {
+        PointList.Remove(item);
+        await grid.RefreshDataAsync();
+    }
+
+    private async Task RandomlizeAll()
+    {
+        var random = new Random();
+
+        var canvasWidth = (int)await coordinateCanvas.GetOffsetWidth();
+        var canvasHeight = (int)await coordinateCanvas.GetOffsetHeight();
+
+        foreach (var point in PointList)
+        {
+            point.X = (int)random.NextInt64(-(canvasWidth / 2) + 100, canvasWidth / 2 - 100);
+            point.Y = (int)random.NextInt64(-(canvasHeight / 2) + 100, canvasHeight / 2 - 100);
+        }
+        await grid.RefreshDataAsync();
+    }
+
+    private Timer timer = new();
+
+    private async Task OnPauseClick()
+    {
+        timer.Stop();
+        Status = IconName.Pause;
+    }
+
+    private async Task OnStopClick()
+    {
+        timer.Stop();
+        Status = IconName.Stop;
+    }
+}

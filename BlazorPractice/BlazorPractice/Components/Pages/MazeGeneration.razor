@@ -1,0 +1,212 @@
+﻿@page "/maze-geneation"
+@using BlazorPractice.Library
+@inject IJSRuntime JS
+
+<PageTitle>Blazor Practice - Maze Geneation</PageTitle>
+
+<style>
+    canvas {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+    }
+
+    .point-display-table-container {
+        position: relative;
+        width: 100%;
+        height: 100%;
+    }
+
+    .point-display-table {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        display: flex;
+        gap: 10px;
+    }
+</style>
+<div class="point-display-table-container">
+    <Preload LoadingText="Loading..." />
+    <canvas id="@CanvasID" />
+    <div class="point-display-table">
+        <Button Color="ButtonColor.Primary" @onclick="OnShowModalClick">
+            <Icon Name="IconName.List" />
+        </Button>
+    </div>
+</div>
+<Modal @ref="modal" Title="Method" OnHidden="OnModalHidden">
+    <BodyTemplate>
+        <RadioInput Name="ChooseMethod" Label="Recursive division method" @bind-Value="useRecursiveDivisionMethod" />
+    </BodyTemplate>
+</Modal>
+@code {
+    private bool useRecursiveDivisionMethod = true;
+    private bool useIterativeRandomizedKruskalAlgorithm;
+
+    const string CanvasID = "CanvasID";
+    protected override void OnInitialized()
+    {
+    }
+
+    private BlazorCanvas canvas;
+
+    private BlazorCanvasContext2D canvasContext2D;
+
+    private Modal modal;
+
+    [Inject] protected PreloadService PreloadService { get; set; } = default!;
+
+    protected async override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            canvas = await BlazorCanvas.Get(JS, CanvasID);
+            await RefreshCanvas(canvas);
+            canvasContext2D = await BlazorCanvasContext2D.Get(JS, CanvasID, "2d");
+
+            PreloadService.Show(SpinnerColor.Light, "Loading data...");
+            await Task.Run(ReGenerate);
+            PreloadService.Hide();
+        }
+    }
+
+    private async Task ReGenerate()
+    {
+        await RefreshCanvas(canvas);
+
+        var width = (int)await canvas.GetOffsetWidth();
+        var height = (int)await canvas.GetOffsetHeight();
+        var blockSize = 20;
+
+        var centerX = (int)width / 2;
+        var lowerBoundX = centerX % blockSize;
+        var upperBoundX = width - (width - lowerBoundX) % blockSize;
+        lowerBoundX += 60;
+        upperBoundX -= 60;
+
+        var centerY = (int)height / 2;
+        var lowerBoundY = centerY % blockSize;
+        var upperBoundY = height - (height - lowerBoundY) % blockSize;
+
+        var sizeX = (upperBoundX - lowerBoundX) / blockSize;
+        var sizeY = (upperBoundY - lowerBoundY) / blockSize;
+
+        bool[,] horizontalWalls;
+        bool[,] verticalWalls;
+        if (useRecursiveDivisionMethod)
+            RecursiveDivisionMethodGenerateMaze(sizeX, sizeY, out horizontalWalls, out verticalWalls);
+        else if (useIterativeRandomizedKruskalAlgorithm)
+            RecursiveDivisionMethodGenerateMaze(sizeX, sizeY, out horizontalWalls, out verticalWalls);
+        else
+            GenerateEmptyMaze(sizeX, sizeY, out horizontalWalls, out verticalWalls);
+
+            
+        for (var i = 0; i < sizeX; i++)
+            for (var j = 0; j < sizeY + 1; j++)
+                if (horizontalWalls[i, j])
+                    await canvasContext2D.FillRect(lowerBoundX + i * blockSize, lowerBoundY + j * blockSize, blockSize, 1);
+
+        for (var i = 0; i < sizeX + 1; i++)
+            for (var j = 0; j < sizeY; j++)
+                if (verticalWalls[i, j])
+                    await canvasContext2D.FillRect(lowerBoundX + i * blockSize, lowerBoundY + j * blockSize, 1, blockSize);
+    }
+
+    private void GenerateEmptyMaze(int sizeX, int sizeY, out bool[,] horizontalWalls, out bool[,] verticalWalls)
+    {
+        horizontalWalls = new bool[sizeX, sizeY + 1];
+        verticalWalls = new bool[sizeX + 1, sizeY];
+    }
+
+    private void RecursiveDivisionMethodGenerateMaze(int sizeX, int sizeY, out bool[,] horizontalWalls, out bool[,] verticalWalls)
+    {
+        horizontalWalls = new bool[sizeX, sizeY + 1];
+        verticalWalls = new bool[sizeX + 1, sizeY];
+
+        for (var i = 0; i < sizeX; i++)
+        {
+            horizontalWalls[i, 0] = true;
+            horizontalWalls[i, sizeY] = true;
+        }
+
+        for (var j = 0; j < sizeY; j++)
+        {
+            verticalWalls[0, j] = true;
+            verticalWalls[sizeX, j] = true;
+        }
+
+        horizontalWalls[0, 0] = false;
+        horizontalWalls[sizeX - 1, sizeY] = false;
+
+        Caculate(ref horizontalWalls, ref verticalWalls, 0, sizeX, 0, sizeY);
+    }
+
+    private void Caculate(ref bool[,] horizontalWalls, ref bool[,] verticalWalls, int areaLowerX, int areaUpperX, int areaLowerY, int areaUpperY)
+    {
+        if (areaUpperX <= areaLowerX+1 || areaUpperY <= areaLowerY+1)
+            return;
+
+        var random = new Random();
+
+        var horizontalCut = (int)random.NextInt64(areaLowerY + 1, areaUpperY);
+        for (var i = areaLowerX; i < areaUpperX; i++)
+            horizontalWalls[i, horizontalCut] = true;
+
+        var verticalCut = (int)random.NextInt64(areaLowerX + 1, areaUpperX);
+        for (var i = areaLowerY; i < areaUpperY; i++)
+            verticalWalls[verticalCut, i] = true;
+
+        var horizontalHole1 = random.NextInt64(areaLowerX, verticalCut);
+        var horizontalHole2 = random.NextInt64(verticalCut, areaUpperX);
+
+        var verticalHole1 = random.NextInt64(areaLowerY, horizontalCut);
+        var verticalHole2 = random.NextInt64(horizontalCut, areaUpperY);
+
+        switch (random.NextInt64(4))
+        {
+            case 0:
+                horizontalWalls[horizontalHole1, horizontalCut] = false;
+                horizontalWalls[horizontalHole2, horizontalCut] = false;
+                verticalWalls[verticalCut, verticalHole2] = false;
+                break;
+            case 1:
+                horizontalWalls[horizontalHole1, horizontalCut] = false;
+                verticalWalls[verticalCut, verticalHole1] = false;
+                verticalWalls[verticalCut, verticalHole2] = false;
+                break;
+            case 2:
+                horizontalWalls[horizontalHole1, horizontalCut] = false;
+                horizontalWalls[horizontalHole2, horizontalCut] = false;
+                verticalWalls[verticalCut, verticalHole1] = false;
+                break;
+            case 3:
+                horizontalWalls[horizontalHole2, horizontalCut] = false;
+                verticalWalls[verticalCut, verticalHole1] = false;
+                verticalWalls[verticalCut, verticalHole2] = false;
+                break;
+        }
+
+        Caculate(ref horizontalWalls, ref verticalWalls, areaLowerX, verticalCut, areaLowerY, horizontalCut);
+        Caculate(ref horizontalWalls, ref verticalWalls, areaLowerX, verticalCut, horizontalCut, areaUpperY);
+        Caculate(ref horizontalWalls, ref verticalWalls, verticalCut, areaUpperX, areaLowerY, horizontalCut);
+        Caculate(ref horizontalWalls, ref verticalWalls, verticalCut, areaUpperX, horizontalCut, areaUpperY);
+    }
+
+    private async Task RefreshCanvas(BlazorCanvas canvas)
+    {
+        await canvas.SetWidth(await canvas.GetOffsetWidth());
+        await canvas.SetHeight(await canvas.GetOffsetHeight());
+    }
+
+    private async Task OnShowModalClick()
+    {
+        await modal?.ShowAsync();
+    }
+
+    private async Task OnModalHidden()
+    {
+        PreloadService.Show(SpinnerColor.Light, "Loading data...");
+        await Task.Run(ReGenerate);
+        PreloadService.Hide();
+    }
+}
